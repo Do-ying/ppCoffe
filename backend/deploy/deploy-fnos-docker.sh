@@ -216,7 +216,16 @@ if [[ "$NEED_IMAGES" == "0" ]]; then
 else
     echo "    镜像已存在（ppcoffe/api:latest），跳过传输"
 fi
-ssh "$HOST" "mkdir -p '$REMOTE_DIR/web' && tar -xzf /tmp/ppcoffe-webctx.tar.gz -C '$REMOTE_DIR/web' 2>/dev/null; rm -f /tmp/ppcoffe-webctx.tar.gz"
+
+# web 构建上下文：先整体换成新目录再切换，避免旧的 hash 化产物残留
+# （Taro 产物文件名带内容 hash，新版本构建后旧文件仍在，
+#   而 index.html 只引用新的那个 —— 残留虽不影响运行，但会堆积）
+ssh "$HOST" "cd '$REMOTE_DIR/web' && \
+    rm -rf dist.new && mkdir -p dist.new && \
+    tar -xzf /tmp/ppcoffe-webctx.tar.gz -C dist.new 2>/dev/null && \
+    rm -rf dist.old && mv dist dist.old 2>/dev/null; mv dist.new dist && \
+    rm -rf dist.old && rm -f /tmp/ppcoffe-webctx.tar.gz && \
+    echo '    web 上下文已更新'"
 
 # ======================================================================
 say "[5/6] 生成 .env 并启动 compose"

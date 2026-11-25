@@ -84,6 +84,7 @@ export const api = {
   getBean: (id: string) => client.get<Bean>(`/beans/${id}`),
   createBean: (data: Partial<Bean>) => client.post<Bean>('/beans', data),
   updateBean: (id: string, data: Partial<Bean>) => client.patch<Bean>(`/beans/${id}`, data),
+  deleteBean: (id: string) => client.del<{ ok: boolean }>(`/beans/${id}`),
   beanBrews: (id: string) => client.get<BrewList>(`/beans/${id}/brews`),
   beanRoasts: (id: string) => client.get<RoastList>(`/beans/${id}/roasts`),
 

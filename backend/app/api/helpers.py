@@ -80,11 +80,17 @@ def scope(query: Query, model: Any = None):
     """按当前用户过滤查询。
 
     ``AUTH_MODE=none``（个人单机）或未登录时不做隔离，便于本地直接使用。
+
+    ``user_id IS NULL`` 的记录视为「公共数据」（演示数据、导入的初始数据），
+    对所有用户可见 —— 否则严格等值过滤会把它们对所有人隐藏，
+    表现为「刚 seed 完数据，列表却是空的」。
     """
     user = current_user()
     if user is None:
         return query
-    return query.filter(model.user_id == user.id)
+    return query.filter(
+        or_(model.user_id == user.id, model.user_id.is_(None))
+    )
 
 
 def page_size(default: int = 20) -> int:

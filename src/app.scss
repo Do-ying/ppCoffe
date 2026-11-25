@@ -11,9 +11,59 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- 跨端元素基线 ----------
+ *
+ * Taro H5 会把 <View> / <Text> 编译成自定义元素 taro-view-core / taro-text-core，
+ * 而不是小程序里的 view / text 标签。
+ * 所以写 `view, text { ... }` 选择器在 H5 端是匹配不到任何元素的。
+ *
+ * 这里只保留 box-sizing —— 它不被 Taro 的基础样式覆盖，可以安全地写在静态 CSS 里。
+ */
 view,
-text {
+text,
+taro-view-core,
+taro-text-core,
+taro-input-core,
+taro-textarea-core,
+taro-image-core {
   box-sizing: border-box;
+}
+
+/* ---------- H5 端：修正 Input / Textarea 的内部原生控件 ----------
+ *
+ * Taro H5 的 Input 组件结构：
+ *   <taro-input-core class="form__input"><input class="weui-input"></taro-input-core>
+ *
+ * 外层由 Taro 基础样式控制（height: 1.4rem; overflow: hidden），
+ * 内层 weui-input 又有自己的 height: 1.47059em 且默认顶部对齐。
+ * 两者不一致 → 表单里标签与输入框上下错位、placeholder 跑到标签上一行。
+ *
+ * 这里用后代选择器（特异性高于 Taro 的元素选择器）让内层控件填满外层。
+ * ⚠️ 必须写在打包出的 CSS 里 —— Taro 的基础样式在构建期被注入到
+ *    index.html 的 <head> 末尾（排在 <link> 之后），
+ *    运行时再注入补丁会排在它们前面，反而被压过。
+ */
+/* ⚠️ 选择器必须用类名：写成 `taro-input-core > input` 时，
+ *    sass 会把 `input` 当成自定义元素前缀改写成 `taro-input-core>taro-input-core`，
+ *    规则就匹配不到真正的 <input class="weui-input"> 了。 */
+taro-input-core > .weui-input,
+taro-textarea-core > .taro-textarea {
+  display: block;
+  width: 100%;
+  height: 100%;
+  line-height: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+/* 页面容器补上状态栏安全区，避免内容贴顶被 iOS 状态栏遮挡。
+   （Taro 的 .taro_page 是 position: absolute; top: 0） */
+.taro_page .page {
+  padding-top: calc(env(safe-area-inset-top) + 12px);
 }
 
 /* ---------- 通用排版 ---------- */
@@ -128,6 +178,27 @@ text {
   min-height: 100vh;
   background: var(--bg);
   padding-bottom: 40rpx;
+}
+
+/* ---------- H5 端：Taro 运行时布局修正 ----------
+ *
+ * Taro H5 把页面挂在 .taro_page 上，它是
+ *   position: absolute; top: 0; height: 100%
+ * 而 Taro 自带的导航栏是 position: sticky。
+ *
+ * 本项目每个页面都有自己的大标题（.page__title），
+ * 所以 H5 端不需要 Taro 那条窄导航栏 —— 显示它反而会出现
+ * 「窄条标题 + 大标题」重复，且大标题会被顶到状态栏下面。
+ *
+ * 这里隐藏 Taro 导航栏，改为给页面容器补状态栏安全区留白，
+ * 让内容从状态栏下方正常开始。
+ *
+ * ⚠️ 这条规则与 Taro 构建期注入的基础样式冲突（DOM 顺序在后），
+ *    所以用 !important 强制生效。
+ */
+.taro-navigation-bar-hide,
+.taro-navigation-bar-show {
+  display: none !important;
 }
 
 .page__header {

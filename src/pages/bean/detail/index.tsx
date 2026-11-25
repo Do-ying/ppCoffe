@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { View, Text } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../services'
 import { BREW_METHODS } from '../../../domain/methods'
 import { useResolvedTheme } from '../../../store/useTheme'
@@ -32,6 +32,7 @@ const STAGE_LABEL: Record<string, string> = {
 export default function BeanDetailPage() {
   const { themeClass } = useResolvedTheme()
   const router = Taro.useRouter()
+  const queryClient = useQueryClient()
   const beanId = router.params.id as string
 
   const { data: beans } = useQuery({ queryKey: ['beans'], queryFn: api.listBeans })
@@ -48,6 +49,33 @@ export default function BeanDetailPage() {
     () => (roasts?.items ?? []).filter(r => r.beanId === beanId),
     [roasts, beanId]
   )
+
+  /** 删除豆子：后端会级联删除其下的冲煮与烘焙记录，删除前必须说清影响。 */
+  const remove = async () => {
+    if (!bean) return
+    const affected: string[] = []
+    if (beanBrews.length) affected.push(`${beanBrews.length} 条冲煮记录`)
+    if (beanRoasts.length) affected.push(`${beanRoasts.length} 个烘焙批次`)
+
+    const res = await Taro.showModal({
+      title: '删除豆子',
+      content: affected.length
+        ? `「${bean.name}」及其 ${affected.join('、')} 都会被删除，且无法恢复。`
+        : `确定删除「${bean.name}」吗？删除后无法恢复。`,
+      confirmColor: '#C0392B'
+    })
+    if (!res.confirm) return
+
+    try {
+      await api.deleteBean(bean.id)
+      // 关联的冲煮 / 烘焙列表也会变化，一并失效缓存
+      queryClient.invalidateQueries()
+      Taro.showToast({ title: '已删除', icon: 'success' })
+      setTimeout(() => Taro.navigateBack(), 600)
+    } catch {
+      Taro.showToast({ title: '删除失败', icon: 'none' })
+    }
+  }
 
   if (!bean) {
     return (
@@ -240,6 +268,12 @@ export default function BeanDetailPage() {
             onClick={() => Taro.navigateTo({ url: `/pages/bean/edit/index?id=${beanId}` })}
           >
             编辑豆子信息
+          </View>
+        </View>
+
+        <View className="actions actions--danger">
+          <View className="btn btn--danger" onClick={remove}>
+            删除这支豆子
           </View>
         </View>
       </View>

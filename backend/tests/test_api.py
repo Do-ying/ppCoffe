@@ -713,3 +713,93 @@ def test_refresh_with_access_token_rejected(app):
     status, body = call(client, "POST", "/api/v1/auth/refresh", {"refreshToken": access})
     assert status == 401
     assert body["error"]["code"] == "UNAUTHORIZED"
+
+
+# --------------------------------------------------------------------- #
+#  用户隔离
+# --------------------------------------------------------------------- #
+
+
+def test_owner_scoped_records_visible_to_owner_only(app):
+    """别人的记录不可见；自己的可见。"""
+    application = app
+    application.config["AUTH_MODE"] = "dev"
+    client = application.test_client()
+
+    with application.app_context():
+        from app.models.bean import Bean
+
+        db = _db
+        db.session.add(
+            Bean(id="bn_other_user", user_id="us_someone_else", name="别人的豆子")
+        )
+        db.session.commit()
+
+    _, body = call(client, "POST", "/api/v1/auth/wechat", {"code": "wx-code-iso"})
+    token = body["data"]["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    status, body = call(client, "GET", "/api/v1/beans", headers=headers)
+    assert status == 200
+    names = {b["name"] for b in body["data"]["items"]}
+    assert "别人的豆子" not in names
+
+
+def test_unowned_records_are_visible_to_everyone(app):
+    """``user_id IS NULL`` 视为公共数据（演示数据 / 导入的初始数据）。
+
+    历史上这里用严格等值过滤，导致单条可读（ensure_owner 放行 NULL）
+    但列表查不到 —— 前后端表现不一致。现在两者统一。
+    """
+    application = app
+    application.config["AUTH_MODE"] = "dev"
+    client = application.test_client()
+
+    with application.app_context():
+        from app.models.bean import Bean
+
+        db = _db
+        db.session.add(Bean(id="bn_public", user_id=None, name="公共豆子"))
+        db.session.commit()
+
+    _, body = call(client, "POST", "/api/v1/auth/wechat", {"code": "wx-code-public"})
+    token = body["data"]["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    status, body = call(client, "GET", "/api/v1/beans", headers=headers)
+    assert status == 200
+    names = {b["name"] for b in body["data"]["items"]}
+    assert "公共豆子" in names
+
+    # 单条读取与列表行为保持一致
+    status, body = call(client, "GET", "/api/v1/beans/bn_public", headers=headers)
+    assert status == 200
+    assert body["data"]["name"] == "公共豆子"
+
+
+def test_delete_bean_removes_it(app):
+    """删除豆子后不再出现在列表中。"""
+    application = app
+    application.config["AUTH_MODE"] = "dev"
+    client = application.test_client()
+
+    _, body = call(client, "POST", "/api/v1/auth/wechat", {"code": "wx-code-del"})
+    token = body["data"]["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/beans",
+        {"name": "待删除的豆子", "roastDate": "2026-11-10"},
+        headers=headers,
+    )
+    assert status == 201
+    bean_id = body["data"]["id"]
+
+    status, body = call(client, "DELETE", f"/api/v1/beans/{bean_id}", headers=headers)
+    assert status == 200
+
+    status, body = call(client, "GET", "/api/v1/beans", headers=headers)
+    assert status == 200
+    assert all(b["id"] != bean_id for b in body["data"]["items"])

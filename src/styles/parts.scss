@@ -168,6 +168,19 @@
   gap: var(--sp-2);
 }
 
+/* 危险操作（删除）与常规动作之间留更大间距，
+ * 避免误触 —— 删除不可恢复 */
+.actions--danger {
+  margin-top: var(--sp-6);
+}
+
+/* 删除按钮：描边 + 危险色，和主操作按钮在视觉上明确区分 */
+.btn--danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+
 /* ---------- 空态（内联） ---------- */
 .empty--inline {
   padding: var(--sp-3) 0;
