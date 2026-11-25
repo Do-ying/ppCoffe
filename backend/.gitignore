@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# 环境与密钥
+.env
+*.local
+
+# 运行时产物
+var/
+backend/var/
+*.db
+*.sqlite3
+.selftest.mjs
+.dump-metadata.mjs
+.dump-parity.mjs
+
+# MinIO 离线二进制（由构建上下文带入，不入库）
+minio/minio
+minio/mc

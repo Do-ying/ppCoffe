@@ -1,0 +1,228 @@
+# ppCoffe · fnOS NAS 编排（Docker 版）
+#
+# 部署目录：/vol2/1000/public/ppcoffe
+# 启动：docker compose up -d
+#
+# 端口说明（fnOS 上 80/443/8000/9000 等已被系统与其他应用占用）：
+#   8081  → H5 前端（nginx，对外入口，frp 代理这个）
+#   8080  → API（容器内 8000）
+#   19000 → MinIO S3（预签名直传入口）
+#   19001 → MinIO 控制台
+#
+# ⚠️ SigV4 把 Host 计入签名：
+#    MINIO_PUBLIC_ENDPOINT 必须与浏览器实际访问的 host:port 完全一致，
+#    否则预签名直传报 403 SignatureDoesNotMatch。
+#    走 frp 代理时，这里要填对外地址，并把 PUBLIC_API_BASE 一起改掉。
+
+name: ppcoffe
+
+services:
+  # ------------------------------------------------------------------
+  #  MySQL 8 —— 复用 fnOS 上已有的 mysql 容器，不自建
+  #  （已有实例的宿主机映射端口是 3360，不是 3306）
+  #  这里保留一个连接配置说明，真正的库由 deploy 脚本预先建好
+  # ------------------------------------------------------------------
+  mysql:
+    image: mysql:8.4
+    container_name: ppcoffe-mysql
+    restart: unless-stopped
+    profiles: ["standalone-mysql"]
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-buffer-size=8M
+      - --max-connections=60
+      - --performance-schema=OFF
+      - --skip-name-resolve
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ppcoffe}
+      MYSQL_USER: ${MYSQL_USER:-ppcoffe}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 中设置 MYSQL_PASSWORD}
+      TZ: UTC
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "${MYSQL_STANDALONE_PORT:-13306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    mem_limit: 512m
+    networks: [ppcoffe]
+
+  # ------------------------------------------------------------------
+  #  Redis 7 —— 可选缓存层，未启用时后端自动降级
+  # ------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ppcoffe-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "${REDIS_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    mem_limit: 256m
+    networks: [ppcoffe]
+
+  # ------------------------------------------------------------------
+  #  MinIO —— 自建镜像（Alpine musl 运行时，Docker Hub 第三方命名空间不可达）
+  # ------------------------------------------------------------------
+  minio:
+    # 镜像由 deploy 脚本 docker load 进来（Alpine musl 运行时，Docker Hub 第三方
+    # 命名空间不可达，无法直接 pull）。构建定义仅作本地重建用。
+    build:
+      context: ./backend/minio
+      dockerfile: ${MINIO_DOCKERFILE:-Dockerfile.offline}
+    image: ppcoffe/minio:alpine-20250524
+    container_name: ppcoffe-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?请在 .env 中设置 MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env 中设置 MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_PORT:-19000}:9000"   # S3 API（预签名直传走这里）
+      - "${MINIO_CONSOLE_PORT:-19001}:9001"  # Web 控制台
+    healthcheck:
+      # Alpine 基础镜像只有 busybox wget，没有官方镜像里的 mc ready
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 256m
+    networks: [ppcoffe]
+
+  # 一次性任务：建桶 + 生命周期规则 + 创建应用专用受限账号
+  minio-init:
+    image: ppcoffe/minio:alpine-20250524
+    container_name: ppcoffe-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?请在 .env 中设置 MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env 中设置 MINIO_ROOT_PASSWORD}
+      MINIO_APP_ACCESS_KEY: ${MINIO_APP_ACCESS_KEY:?请在 .env 中设置 MINIO_APP_ACCESS_KEY}
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?请在 .env 中设置 MINIO_APP_SECRET_KEY}
+      MINIO_BUCKET_BREW: ${MINIO_BUCKET_BREW:-ppcoffe-brew}
+      MINIO_BUCKET_ROAST: ${MINIO_BUCKET_ROAST:-ppcoffe-roast}
+      MINIO_BUCKET_TEMP: ${MINIO_BUCKET_TEMP:-ppcoffe-tmp}
+    entrypoint: ["sh", "/init/minio-init.sh"]
+    volumes:
+      # 初始化脚本与策略文件在 backend/deploy/ 下
+      - ./backend/deploy:/init:ro
+    profiles: ["minio"]
+    restart: "no"
+    networks: [ppcoffe]
+
+  # ------------------------------------------------------------------
+  #  API —— Flask + gunicorn
+  # ------------------------------------------------------------------
+  api:
+    # 镜像由 deploy 脚本 docker load 进来；构建定义仅作本地重建用。
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+    image: ppcoffe/api:latest
+    container_name: ppcoffe-api
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8000
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+      SECRET_KEY: ${SECRET_KEY:?请在 .env 中设置 SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET:-${SECRET_KEY}}
+      AUTH_MODE: ${AUTH_MODE:-dev}
+      WECHAT_APPID: ${WECHAT_APPID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+      # 复用 fnOS 上已有的 MySQL（宿主机映射端口 3360）
+      DATABASE_URL: ${DATABASE_URL:?请在 .env 中设置 DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-minio}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?请在 .env 中设置 MINIO_PUBLIC_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_APP_ACCESS_KEY:?请在 .env 中设置 MINIO_APP_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?请在 .env 中设置 MINIO_APP_SECRET_KEY}
+      MINIO_SECURE: "false"
+      MINIO_REGION: us-east-1
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-}
+      MINIO_BUCKET_BREW: ${MINIO_BUCKET_BREW:-ppcoffe-brew}
+      MINIO_BUCKET_ROAST: ${MINIO_BUCKET_ROAST:-ppcoffe-roast}
+      MINIO_BUCKET_TEMP: ${MINIO_BUCKET_TEMP:-ppcoffe-tmp}
+      LOCAL_STORAGE_ROOT: /app/var/uploads
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
+      GUNICORN_LOG_LEVEL: ${GUNICORN_LOG_LEVEL:-info}
+    ports:
+      - "${API_PORT:-8080}:8000"
+    volumes:
+      - uploads-data:/app/var/uploads
+    # 复用 fnOS 上已有的 MySQL 容器时需要访问宿主机；
+    # host.docker.internal 在 Linux 上默认不解析，这里显式指向 docker0 网关。
+    extra_hosts:
+      - "host.docker.internal:${DOCKER_HOST_GW:-172.17.0.1}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 384m
+    networks: [ppcoffe]
+
+  # ------------------------------------------------------------------
+  #  前端 + 反向代理 —— 对外唯一入口
+  #
+  #  nginx 同时做两件事：
+  #    1) 托管 H5 静态产物（/）
+  #    2) 反代 API（/api/）与 S3 预签名直传（/s3/）
+  #
+  #  ⚠️ S3 路径不能改写：SigV4 把 canonical URI 算进签名，
+  #     任何路径改写都会导致 SignatureDoesNotMatch。
+  #     所以这里用 /s3/ 前缀时必须同步改 MINIO_PUBLIC_ENDPOINT 与预签名逻辑，
+  #     默认配置为「前端与 API 同端口、S3 独立端口」方案，见 deploy/nginx.conf。
+  # ------------------------------------------------------------------
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: ppcoffe/web:latest
+    container_name: ppcoffe-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    mem_limit: 64m
+    networks: [ppcoffe]
+
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+  uploads-data:
+
+networks:
+  ppcoffe:
+    driver: bridge

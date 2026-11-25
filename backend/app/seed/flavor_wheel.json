@@ -1,0 +1,427 @@
+{
+  "version": "SCA-2016-WCR",
+  "categories": [
+    {
+      "id": "floral",
+      "label": "花香",
+      "color": "#E8A0BF",
+      "subcategories": [
+        {
+          "id": "floral_light",
+          "label": "轻柔花香",
+          "descriptors": [
+            {
+              "id": "jasmine",
+              "label": "茉莉"
+            },
+            {
+              "id": "rose",
+              "label": "玫瑰"
+            },
+            {
+              "id": "chamomile",
+              "label": "洋甘菊"
+            }
+          ]
+        },
+        {
+          "id": "floral_intense",
+          "label": "浓烈花香",
+          "descriptors": [
+            {
+              "id": "lavender",
+              "label": "薰衣草"
+            },
+            {
+              "id": "honeysuckle",
+              "label": "忍冬"
+            },
+            {
+              "id": "jasmine_heavy",
+              "label": "栀子花"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fruity",
+      "label": "果香",
+      "color": "#D9573B",
+      "subcategories": [
+        {
+          "id": "berry",
+          "label": "浆果",
+          "descriptors": [
+            {
+              "id": "blueberry",
+              "label": "蓝莓"
+            },
+            {
+              "id": "raspberry",
+              "label": "树莓"
+            },
+            {
+              "id": "strawberry",
+              "label": "草莓"
+            },
+            {
+              "id": "blackberry",
+              "label": "黑莓"
+            }
+          ]
+        },
+        {
+          "id": "citrus",
+          "label": "柑橘",
+          "descriptors": [
+            {
+              "id": "lemon",
+              "label": "柠檬"
+            },
+            {
+              "id": "orange",
+              "label": "橙子"
+            },
+            {
+              "id": "bergamot",
+              "label": "佛手柑"
+            },
+            {
+              "id": "lime",
+              "label": "青柠"
+            }
+          ]
+        },
+        {
+          "id": "stone_fruit",
+          "label": "核果",
+          "descriptors": [
+            {
+              "id": "peach",
+              "label": "桃子"
+            },
+            {
+              "id": "apricot",
+              "label": "杏"
+            },
+            {
+              "id": "plum",
+              "label": "李子"
+            }
+          ]
+        },
+        {
+          "id": "tropical",
+          "label": "热带水果",
+          "descriptors": [
+            {
+              "id": "mango",
+              "label": "芒果"
+            },
+            {
+              "id": "passionfruit",
+              "label": "百香果"
+            },
+            {
+              "id": "pineapple",
+              "label": "菠萝"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sour_fermented",
+      "label": "酸 · 发酵",
+      "color": "#C0392B",
+      "subcategories": [
+        {
+          "id": "fermented",
+          "label": "发酵感",
+          "descriptors": [
+            {
+              "id": "wine",
+              "label": "酒感"
+            },
+            {
+              "id": "vinegar",
+              "label": "醋感"
+            },
+            {
+              "id": "kombucha",
+              "label": "康普茶"
+            }
+          ]
+        },
+        {
+          "id": "sour",
+          "label": "酸涩（欠萃）",
+          "descriptors": [
+            {
+              "id": "sour_sharp",
+              "label": "尖酸"
+            },
+            {
+              "id": "sour_acetous",
+              "label": "醋酸感"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "green_vegetal",
+      "label": "绿 · 植物",
+      "color": "#5B8C5A",
+      "subcategories": [
+        {
+          "id": "green",
+          "label": "植物感",
+          "descriptors": [
+            {
+              "id": "green_tea",
+              "label": "绿茶"
+            },
+            {
+              "id": "herbal",
+              "label": "草本"
+            },
+            {
+              "id": "vegetal",
+              "label": "青草"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "other",
+      "label": "其他",
+      "color": "#8E8E8E",
+      "subcategories": [
+        {
+          "id": "distinct",
+          "label": "独特风味",
+          "descriptors": [
+            {
+              "id": "earthy",
+              "label": "土壤"
+            },
+            {
+              "id": "woody",
+              "label": "木质"
+            },
+            {
+              "id": "papery",
+              "label": "纸板味"
+            },
+            {
+              "id": "moldy",
+              "label": "霉味"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "roasted",
+      "label": "烘烤",
+      "color": "#7A4A2B",
+      "subcategories": [
+        {
+          "id": "roast_basic",
+          "label": "烘烤调",
+          "descriptors": [
+            {
+              "id": "toast",
+              "label": "吐司"
+            },
+            {
+              "id": "toasted",
+              "label": "烘烤坚果"
+            },
+            {
+              "id": "cereal",
+              "label": "谷物"
+            }
+          ]
+        },
+        {
+          "id": "roast_deep",
+          "label": "深度烘烤",
+          "descriptors": [
+            {
+              "id": "smoky",
+              "label": "烟熏"
+            },
+            {
+              "id": "burnt",
+              "label": "焦糊"
+            },
+            {
+              "id": "pipe_tobacco",
+              "label": "烟斗烟草"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spices",
+      "label": "香料",
+      "color": "#B4643C",
+      "subcategories": [
+        {
+          "id": "spice_warm",
+          "label": "温暖香料",
+          "descriptors": [
+            {
+              "id": "cinnamon",
+              "label": "肉桂"
+            },
+            {
+              "id": "clove",
+              "label": "丁香"
+            },
+            {
+              "id": "cardamom",
+              "label": "豆蔻"
+            },
+            {
+              "id": "nutmeg",
+              "label": "肉豆蔻"
+            }
+          ]
+        },
+        {
+          "id": "spice_pungent",
+          "label": "辛香",
+          "descriptors": [
+            {
+              "id": "pepper",
+              "label": "胡椒"
+            },
+            {
+              "id": "anise",
+              "label": "茴香"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nutty_cocoa",
+      "label": "坚果 · 可可",
+      "color": "#A1704A",
+      "subcategories": [
+        {
+          "id": "nutty",
+          "label": "坚果",
+          "descriptors": [
+            {
+              "id": "almond",
+              "label": "杏仁"
+            },
+            {
+              "id": "hazelnut",
+              "label": "榛果"
+            },
+            {
+              "id": "peanut",
+              "label": "花生"
+            }
+          ]
+        },
+        {
+          "id": "cocoa",
+          "label": "可可",
+          "descriptors": [
+            {
+              "id": "chocolate",
+              "label": "巧克力"
+            },
+            {
+              "id": "cocoa_powder",
+              "label": "可可粉"
+            },
+            {
+              "id": "caramel",
+              "label": "焦糖"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sweet",
+      "label": "甜",
+      "color": "#D9A441",
+      "subcategories": [
+        {
+          "id": "sweet_basic",
+          "label": "糖类",
+          "descriptors": [
+            {
+              "id": "honey",
+              "label": "蜂蜜"
+            },
+            {
+              "id": "maple",
+              "label": "枫糖"
+            },
+            {
+              "id": "brown_sugar",
+              "label": "红糖"
+            },
+            {
+              "id": "molasses",
+              "label": "糖蜜"
+            },
+            {
+              "id": "vanilla",
+              "label": "香草"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "defects": [
+    {
+      "id": "papery",
+      "label": "纸板味",
+      "severity": 1
+    },
+    {
+      "id": "moldy",
+      "label": "霉味",
+      "severity": 2
+    },
+    {
+      "id": "phenolic",
+      "label": "酚类",
+      "severity": 2
+    },
+    {
+      "id": "fermented_boozy",
+      "label": "过发酵酒味",
+      "severity": 2
+    },
+    {
+      "id": "rubbery",
+      "label": "橡胶味",
+      "severity": 2
+    },
+    {
+      "id": "grassy",
+      "label": "生青味",
+      "severity": 1
+    },
+    {
+      "id": "quakery",
+      "label": "发酵粉味",
+      "severity": 1
+    }
+  ]
+}

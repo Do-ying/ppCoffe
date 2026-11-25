@@ -1,0 +1,144 @@
+.method-sub {
+  display: block;
+  margin-top: 10rpx;
+  font-size: var(--fs-sm);
+}
+
+/* ---------- 粉液比读数 ---------- */
+.ratio-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+
+.ratio-box__value {
+  display: block;
+  font-size: var(--fs-display);
+  line-height: 1.15;
+  margin-top: 6rpx;
+  color: var(--signal);
+}
+
+.ratio-box__range {
+  text-align: right;
+  font-size: var(--fs-xs);
+}
+
+.ratio-box__range .mono {
+  display: block;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  margin-top: 4rpx;
+}
+
+.issue {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+}
+
+.issue--error {
+  border-left-color: var(--danger);
+}
+
+/* ---------- 参数行 ---------- */
+.param {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.param__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.param__label {
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.param__value {
+  font-size: var(--fs-lg);
+  color: var(--signal);
+}
+
+.param__slider {
+  margin: var(--sp-2) 0 4rpx;
+}
+
+.param__range {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-mute);
+}
+
+.param__hint {
+  display: block;
+  margin-top: 4rpx;
+  font-size: var(--fs-xs);
+}
+
+.param__issue {
+  display: block;
+  margin-top: 4rpx;
+  font-size: var(--fs-xs);
+}
+
+.actions {
+  margin-top: var(--sp-5);
+}
+
+/* ---------- 器具与研磨度 ---------- */
+.group-label {
+  display: block;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-mute);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: var(--sp-1);
+}
+
+.form {
+  margin-top: var(--sp-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 0 var(--sp-3);
+}
+
+.form__row {
+  display: flex;
+  align-items: center;
+  min-height: 96rpx;
+}
+
+.form__label {
+  width: 140rpx;
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.form__input {
+  flex: 1;
+  height: 96rpx;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.empty--inline {
+  padding: var(--sp-3) 0;
+  text-align: left;
+}

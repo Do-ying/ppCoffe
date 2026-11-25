@@ -1,0 +1,47 @@
+@import '../../styles/parts.scss';
+
+.block__hint {
+  display: block;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+
+/* ---------- 主题选择 ---------- */
+.theme-picker {
+  display: flex;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+}
+
+.theme-opt {
+  flex: 1;
+  padding: var(--sp-2) var(--sp-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  text-align: center;
+}
+
+.theme-opt--active {
+  border-color: var(--signal);
+  background: rgba(127, 209, 193, 0.08);
+}
+
+.theme-opt__label {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.theme-opt--active .theme-opt__label {
+  color: var(--signal);
+}
+
+.theme-opt__hint {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 18rpx;
+  line-height: 1.4;
+  color: var(--text-mute);
+}

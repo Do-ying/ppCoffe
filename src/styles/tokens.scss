@@ -1,0 +1,34 @@
+/**
+ * 布局与排版令牌（两套主题共用）
+ * 颜色类令牌见 themes.scss
+ */
+
+:root,
+.theme-dark,
+.theme-light {
+  /* ---------- 间距（rpx，750 设计稿） ---------- */
+  --sp-1: 8rpx;
+  --sp-2: 16rpx;
+  --sp-3: 24rpx;
+  --sp-4: 32rpx;
+  --sp-5: 48rpx;
+  --sp-6: 64rpx;
+
+  /* ---------- 圆角（克制，避免 SaaS 卡片感） ---------- */
+  --r-sm: 4rpx;
+  --r-md: 10rpx;
+  --r-lg: 20rpx;
+
+  /* ---------- 字体 ---------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'Roboto Mono', Menlo, Consolas, monospace;
+
+  /* ---------- 字号 ---------- */
+  --fs-display: 56rpx;
+  --fs-title: 40rpx;
+  --fs-lg: 32rpx;
+  --fs-md: 28rpx;
+  --fs-sm: 24rpx;
+  --fs-xs: 20rpx;
+}

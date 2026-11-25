@@ -1,0 +1,29 @@
+# 本地构建的 MinIO Server 镜像
+#
+# 背景：MinIO 开源版已归档，官方镜像（Docker Hub 第三方命名空间）在部分网络环境
+#       不可达 —— Docker Hub 域名被 DNS 污染、国内镜像源只代理 library/ 官方命名空间。
+#       因此从源码编译并自行打标签，compose 文件可以原样使用：
+#           minio/minio:RELEASE.2025-04-22T22-12-26Z
+FROM alpine:3.21
+
+# CA 证书由构建上下文提供（避免 apk 依赖外网）
+COPY ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+COPY minio /usr/local/bin/minio
+COPY mc /usr/local/bin/mc
+RUN chmod +x /usr/local/bin/minio /usr/local/bin/mc
+
+# 官方 entrypoint：处理 "minio server /data" 形式的参数、配置 MINIO_ROOT_USER_FILE 等
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENV MINIO_UPDATE=off \
+    MINIO_ROOT_USER=minioadmin \
+    MINIO_ROOT_PASSWORD=minioadmin
+
+EXPOSE 9000 9001
+
+# 注意：compose 的健康检查用的是容器内的 `mc ready local`，
+#      所以这个镜像必须同时包含 mc（官方镜像也是如此）
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["server", "/data", "--console-address", ":9001"]

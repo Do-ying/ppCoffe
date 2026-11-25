@@ -1,0 +1,40 @@
+# ppCoffe · MinIO 运行时镜像（离线版）
+#
+# 与 Dockerfile（apk 在线安装版）的区别：
+#   这一版**构建时完全不需要网络** —— MinIO 与 mc 的二进制由构建上下文带入。
+#   适用于「Docker Hub / Alpine 源在构建阶段不可达」的网络环境
+#   （例如本项目的阿里云 ECS：BuildKit 默认网络下 apk 拉取会挂起）。
+#
+# 二进制来源（Alpine 社区仓库，已验证为正版上游构建）：
+#   minio : minio 0.20250524.170830-r5  → RELEASE.2025-05-24T17-08-30Z
+#   mc    : minio-client 0.20250521.015954-r5 → RELEASE.2025-05-21T01-59-54Z
+#   （Alpine 社区源把 mc 安装为 /usr/bin/mcli，此处重命名为 mc）
+#
+# 两者都是 musl 动态链接的 ELF x86-64，依赖 so:libc.musl-x86_64.so.1，
+# 因此基础镜像用 alpine（自带 musl）。
+#
+# 放置二进制：
+#   cp /path/to/minio /path/to/mc  minio/
+# 构建：
+#   docker build -f minio/Dockerfile.offline -t ppcoffe/minio:alpine-20250524 minio/
+
+FROM alpine:3.22
+
+COPY minio /usr/bin/minio
+COPY mc /usr/bin/mc
+
+# musl 运行时已在 alpine 基础镜像内
+# （本机 MinIO 只通过内网 HTTP 通信，不需要 CA 证书，因此这里不联网装包）
+RUN chmod +x /usr/bin/minio /usr/bin/mc \
+ && minio --version \
+ && mc --version
+
+ENV MINIO_ROOT_USER=minioadmin \
+    MINIO_ROOT_PASSWORD=minioadmin \
+    MINIO_BROWSER_REDIRECT_URL=http://127.0.0.1:9001
+
+EXPOSE 9000 9001
+VOLUME /data
+
+ENTRYPOINT ["/usr/bin/minio"]
+CMD ["server", "/data", "--console-address", ":9001"]

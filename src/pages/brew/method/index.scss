@@ -1,0 +1,97 @@
+.method-sub {
+  display: block;
+  margin-top: 10rpx;
+  font-size: var(--fs-sm);
+}
+
+.method-cat {
+  display: block;
+  margin-bottom: var(--sp-2);
+}
+
+.method-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.method {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+
+.method--active {
+  border-left-color: var(--signal);
+}
+
+.method__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.method__name {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.method__sig {
+  font-size: var(--fs-xs);
+  color: var(--signal);
+}
+
+.method__summary {
+  display: block;
+  margin-top: 8rpx;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.method__grind {
+  display: block;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-mute);
+}
+
+/* 六轴迷你条 */
+.method__baseline {
+  display: flex;
+  gap: 10rpx;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+  align-items: flex-end;
+}
+
+.axis-mini {
+  flex: 1;
+  text-align: center;
+}
+
+.axis-mini__track {
+  position: relative;
+  width: 32rpx;
+  height: 72rpx;
+  margin: 0 auto;
+  background: var(--surface-2);
+  border-radius: 2rpx;
+  display: flex;
+  align-items: flex-end;
+}
+
+.axis-mini__fill {
+  width: 100%;
+  border-radius: 2rpx;
+}
+
+.axis-mini__label {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 18rpx;
+  color: var(--text-mute);
+}

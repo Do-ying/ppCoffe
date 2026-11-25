@@ -1,0 +1,70 @@
+@import '../../../styles/parts.scss';
+
+.list-sub {
+  display: block;
+  margin-top: 8rpx;
+  font-size: var(--fs-sm);
+}
+
+.chart-box {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2);
+  overflow: hidden;
+}
+
+.stage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.stage-legend__item {
+  display: flex;
+  align-items: center;
+}
+
+.stage-legend__dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 2rpx;
+  margin-right: 6rpx;
+}
+
+.actions {
+  margin-top: var(--sp-5);
+}
+
+/* ---------- 分段切换 ---------- */
+.segmented {
+  display: flex;
+  gap: 2rpx;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2rpx;
+  margin-bottom: var(--sp-3);
+}
+
+.segmented__item {
+  flex: 1;
+  padding: var(--sp-2) var(--sp-1);
+  border-radius: 3rpx;
+  text-align: center;
+}
+
+.segmented__item--active {
+  background: var(--surface-3);
+}
+
+.segmented__label {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.segmented__item--active .segmented__label {
+  color: var(--signal);
+}

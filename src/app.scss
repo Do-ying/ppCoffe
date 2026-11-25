@@ -1,0 +1,153 @@
+@import './styles/themes.scss';
+@import './styles/tokens.scss';
+
+page,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+view,
+text {
+  box-sizing: border-box;
+}
+
+/* ---------- 通用排版 ---------- */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+}
+
+.section-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+.mute {
+  color: var(--text-mute);
+}
+.signal {
+  color: var(--signal);
+}
+.danger {
+  color: var(--danger);
+}
+.warn {
+  color: var(--amber);
+}
+
+/* ---------- 面板：发丝线分隔，不做同款圆角卡 ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+}
+
+/* ---------- 数据行：等宽数字对齐 ---------- */
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--sp-1) 0;
+}
+
+.data-row__label {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.data-row__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+/* ---------- 标签 ---------- */
+.tag {
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  margin: 0 8rpx 8rpx 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+
+.tag--active {
+  border-color: var(--signal);
+  color: var(--signal);
+  background: rgba(127, 209, 193, 0.08);
+}
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+
+.btn--primary {
+  background: var(--signal);
+  color: #0d0f0e;
+}
+
+.btn--ghost {
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+
+/* ---------- 页面容器 ---------- */
+.page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 40rpx;
+}
+
+.page__header {
+  padding: var(--sp-4) var(--sp-3) var(--sp-3);
+}
+
+.page__title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.page__body {
+  padding: 0 var(--sp-3);
+}
+
+/* ---------- 空态 ---------- */
+.empty {
+  padding: 80rpx var(--sp-3);
+  text-align: center;
+  color: var(--text-mute);
+  font-size: var(--fs-sm);
+}

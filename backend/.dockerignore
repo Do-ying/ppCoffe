@@ -1,0 +1,14 @@
+# 忽略本地开发产物，减小构建上下文
+.venv/
+venv/
+var/
+.env
+.git/
+.gitignore
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+openapi.json
+*.md
+!README.md

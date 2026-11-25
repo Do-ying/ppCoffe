@@ -1,0 +1,42 @@
+dist/
+deploy_versions/
+.temp/
+.rn_temp/
+node_modules/
+.DS_Store
+.swc
+*.local
+
+# 脚本构建产物
+.selftest.mjs
+.dump-metadata.mjs
+.dump-parity.mjs
+
+# Python 后端
+backend/.venv/
+backend/var/
+backend/.env
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# 本地构建临时产物（H5 输出目录）
+tmp/
+
+# 部署凭据（真实 .env 不入库，只提交 .example 模板）
+backend/deploy/.env
+backend/.minio-env
+
+# MinIO 离线二进制（由构建上下文带入，不入库）
+backend/minio/minio
+backend/minio/mc
+
+# H5 构建产物
+dist-h5/
+dist-h5-test/
+
+# 探测用临时文件
+_mcp_*.py
+
+# node_modules 可能是指向本机路径的软链（模式 120000），目录规则匹配不到
+node_modules

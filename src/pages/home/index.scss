@@ -1,0 +1,174 @@
+.home-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.home-top .page__title {
+  display: block;
+  margin-top: 6rpx;
+}
+
+.home-settings {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  padding: 8rpx 4rpx;
+}
+
+.home-sub {
+  display: block;
+  margin-top: 8rpx;
+  font-size: var(--fs-sm);
+}
+
+/* ---------- 统计条 ---------- */
+.stat-row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.stat {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2);
+}
+
+.stat__value {
+  display: block;
+  font-size: var(--fs-display);
+  line-height: 1.1;
+  margin-top: 6rpx;
+  color: var(--text);
+}
+
+.stat__unit {
+  font-size: var(--fs-xs);
+  color: var(--text-mute);
+}
+
+/* ---------- 区块 ---------- */
+.block {
+  margin-top: var(--sp-5);
+}
+
+.block__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--sp-2);
+}
+
+.panel--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ---------- 快速记录网格 ---------- */
+.quick-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.quick-item {
+  width: calc(25% - 6rpx);
+  padding: var(--sp-2) var(--sp-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  text-align: center;
+}
+
+.quick-item__name {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.quick-item__hint {
+  display: block;
+  margin-top: 4rpx;
+  font-size: var(--fs-xs);
+  color: var(--text-mute);
+}
+
+/* ---------- 工具入口 ---------- */
+.tool-row {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.tool-item {
+  flex: 1;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--signal-dim);
+  border-radius: var(--r-sm);
+}
+
+.tool-item__name {
+  display: block;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.tool-item__hint {
+  display: block;
+  margin-top: 4rpx;
+  font-size: var(--fs-xs);
+  color: var(--text-mute);
+}
+
+/* ---------- 列表行 ---------- */
+.list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.list-row--bordered {
+  border-top: 1px solid var(--line);
+}
+
+.list-row__main {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--sp-2);
+}
+
+.list-row__title {
+  display: block;
+  font-size: var(--fs-md);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row__sub {
+  display: block;
+  margin-top: 4rpx;
+  font-size: var(--fs-xs);
+}
+
+.list-row__side {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.list-row__score {
+  display: block;
+  font-size: var(--fs-lg);
+  color: var(--signal);
+  line-height: 1.2;
+}
+
+.list-row__meta {
+  display: block;
+  font-size: var(--fs-xs);
+}

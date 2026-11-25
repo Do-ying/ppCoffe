@@ -1,0 +1,111 @@
+/**
+ * 主题令牌
+ *
+ * 两套配色，用 CSS 变量实现，切换只需换一组变量值。
+ *
+ * 深色（默认）：炭墨底 + 仪表荧光青，参照示波器 / 飞行仪表的质感
+ * 浅色：冷灰白纸感 + 深墨字 + 压暗的信号青
+ *   ——刻意不用米色/奶油底 + 陶土橙那一套（AI 生成感的典型配色），
+ *     也不把深色主题简单反相，保持同一套「仪表」语言。
+ *
+ * 用法：
+ *   H5   —— <html data-theme="light">
+ *   小程序 —— 页面根节点 <View class="page theme-light">
+ */
+
+@mixin theme-dark {
+  --bg: #0d0f0e;
+  --surface: #151817;
+  --surface-2: #1c201e;
+  --surface-3: #242927;
+  --line: #2a302d;
+  --line-strong: #3a423e;
+
+  --text: #e8ede8;
+  --text-dim: #9ba59e;
+  --text-mute: #69726c;
+
+  --signal: #7fd1c1;
+  --signal-dim: #3d6d66;
+  --amber: #e9b44c;
+  --danger: #e0604e;
+  --ok: #8fcb6b;
+
+  --stage-preinfusion: #6c9bd1;
+  --stage-bloom: #7fd1c1;
+  --stage-extraction: #5fa8a0;
+  --stage-drawdown: #e9b44c;
+
+  --axis-1: #7fd1c1;
+  --axis-2: #e9b44c;
+  --axis-3: #6c9bd1;
+  --axis-4: #c98fd1;
+  --axis-5: #8fcb6b;
+  --axis-6: #d1a37f;
+
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+@mixin theme-light {
+  --bg: #f2f4f2;
+  --surface: #ffffff;
+  --surface-2: #ecefee;
+  --surface-3: #e3e7e4;
+  --line: #dde2de;
+  --line-strong: #c3cac5;
+
+  --text: #171a18;
+  --text-dim: #55605a;
+  --text-mute: #838d87;
+
+  --signal: #0e8a78;
+  --signal-dim: #9fd8ce;
+  --amber: #a8710a;
+  --danger: #c0392b;
+  --ok: #3f7f31;
+
+  --stage-preinfusion: #3b6fa8;
+  --stage-bloom: #0e8a78;
+  --stage-extraction: #2a7f73;
+  --stage-drawdown: #a8710a;
+
+  --axis-1: #0e8a78;
+  --axis-2: #a8710a;
+  --axis-3: #3b6fa8;
+  --axis-4: #8b4fa0;
+  --axis-5: #3f7f31;
+  --axis-6: #a8703f;
+
+  --shadow: rgba(23, 26, 24, 0.12);
+}
+
+/* 显式指定主题 */
+.theme-dark {
+  @include theme-dark;
+}
+
+.theme-light {
+  @include theme-light;
+}
+
+/* 跟随系统（H5 兜底；小程序由 JS 解析系统主题后落到具体主题） */
+@media (prefers-color-scheme: light) {
+  .theme-auto {
+    @include theme-light;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-auto {
+    @include theme-dark;
+  }
+}
+
+/* H5：主题挂在 <html> 上 */
+:root[data-theme='dark'] {
+  @include theme-dark;
+}
+
+:root[data-theme='light'] {
+  @include theme-light;
+}

@@ -1,0 +1,16 @@
+@import '../../../styles/parts.scss';
+
+.list-sub {
+  display: block;
+  margin-top: 8rpx;
+  font-size: var(--fs-sm);
+}
+
+.group-label {
+  display: block;
+  margin-bottom: var(--sp-2);
+}
+
+.actions {
+  margin-top: var(--sp-5);
+}
