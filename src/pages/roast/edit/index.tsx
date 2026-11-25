@@ -1,15 +1,23 @@
-import { useMemo, useState } from 'react'
-import { View, Text, Input } from '@tarojs/components'
+import { useEffect, useMemo, useState } from 'react'
+import { View, Text, Input, Picker } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../services'
+import { ROAST_LEVEL_LABELS } from '../../../domain/types'
 import type { RoastBatchPayload, RoastEvent } from '../../../domain/types'
 import { computeRoastMetrics, generateRoastCurve } from '../../../domain/curve/roast'
 import { useResolvedTheme } from '../../../store/useTheme'
 
 import './index.scss'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const pad = (value: number) => String(value).padStart(2, '0')
+
+const ROASTS: NonNullable<RoastBatchPayload['roastLevel']>[] = [
+  'light',
+  'medium',
+  'medium_dark',
+  'dark'
+]
 
 /** 秒 → 分:秒 */
 function toMMSS(total: number) {
@@ -31,17 +39,34 @@ export default function RoastEditPage() {
   const { themeClass } = useResolvedTheme()
   const router = Taro.useRouter()
   const presetBeanId = router.params.beanId as string | undefined
+  const roastId = router.params.id
+  const queryClient = useQueryClient()
 
+  const { data: existing, isError } = useQuery({
+    queryKey: ['roast', roastId], queryFn: () => api.getRoast(roastId as string), enabled: !!roastId
+  })
   const { data: beans } = useQuery({ queryKey: ['beans'], queryFn: api.listBeans })
+  const { data: presetBean } = useQuery({
+    queryKey: ['bean', presetBeanId],
+    queryFn: () => api.getBean(presetBeanId as string),
+    enabled: !!presetBeanId
+  })
   const { data: equipmentList } = useQuery({
     queryKey: ['equipment'],
     queryFn: api.listEquipment
   })
 
   const [beanId, setBeanId] = useState(presetBeanId || '')
-  const [batchNo, setBatchNo] = useState(
-    `${today().replace(/-/g, '')}-A`
+  const [openedAt] = useState(() => new Date())
+  const [roastDay, setRoastDay] = useState(
+    () => `${openedAt.getFullYear()}-${pad(openedAt.getMonth() + 1)}-${pad(openedAt.getDate())}`
   )
+  const [roastTime, setRoastTime] = useState(
+    () => `${pad(openedAt.getHours())}:${pad(openedAt.getMinutes())}`
+  )
+  const [batchNo, setBatchNo] = useState(() => `${roastDay.replace(/-/g, '')}-A`)
+  const [submissionId] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const [saving, setSaving] = useState(false)
   const [roaster, setRoaster] = useState('')
   const [greenGrams, setGreenGrams] = useState('500')
   const [outGrams, setOutGrams] = useState('425')
@@ -52,6 +77,27 @@ export default function RoastEditPage() {
   const [fcTime, setFcTime] = useState('5:48')
   const [fcTemp, setFcTemp] = useState('201')
   const [dropTemp, setDropTemp] = useState('216')
+  /** 每炉的烘焙度（生豆分多炉时各炉独立） */
+  const [roastLevel, setRoastLevel] = useState<
+    NonNullable<RoastBatchPayload['roastLevel']>
+  >('light')
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (!existing || loaded) return
+    setBeanId(existing.beanId)
+    setBatchNo(existing.batchNo)
+    setRoaster(existing.roaster)
+    setGreenGrams(String(existing.greenGrams))
+    setOutGrams(String(existing.outGrams))
+    if (existing.roastLevel) setRoastLevel(existing.roastLevel)
+    setLoaded(true)
+  }, [existing, loaded])
+
+  /** 烘焙入口仅对生豆开放 —— 成品豆直接冲煮 */
+  const greenBeans = (beans?.items ?? []).filter(b => b.kind === 'green')
+  if (presetBean?.kind === 'green' && !greenBeans.some(b => b.id === presetBean.id)) {
+    greenBeans.unshift(presetBean)
+  }
 
   const roasters = useMemo(
     () => (equipmentList?.items ?? []).filter(e => e.type === 'roaster'),
@@ -59,11 +105,19 @@ export default function RoastEditPage() {
   )
 
   const save = async () => {
-    if (!beanId) {
-      Taro.showToast({ title: '请选择豆子', icon: 'none' })
+    if (saving) return
+    const bean = greenBeans.find(item => item.id === beanId)
+    if (!bean && !existing) {
+      Taro.showToast({ title: '请选择生豆', icon: 'none' })
       return
     }
     const total = parseTime(totalTime)
+    const timestamp = new Date(`${roastDay}T${roastTime}:00`)
+    if (!batchNo.trim() || (!existing &&
+      (!Number.isInteger(total) || total <= 0 || !Number.isFinite(timestamp.getTime())))) {
+      Taro.showToast({ title: '请填写炉号、下豆时间和有效总时长', icon: 'none' })
+      return
+    }
     const events: RoastEvent[] = [
       { type: 'charge', atSecond: 0, temperature: Number(chargeTemp) || 200 },
       {
@@ -75,9 +129,24 @@ export default function RoastEditPage() {
       { type: 'drop', atSecond: total, temperature: Number(dropTemp) || 215 }
     ]
 
+    const green = Number(greenGrams) || 0
+    const out = Number(outGrams) || 0
+    if (!Number.isInteger(green) || green <= 0) {
+      Taro.showToast({ title: '投豆克数须为正整数', icon: 'none' })
+      return
+    }
+    if (!Number.isInteger(out) || out <= 0) {
+      Taro.showToast({ title: '出豆克数须为正整数', icon: 'none' })
+      return
+    }
+    if (out > green) {
+      Taro.showToast({ title: '出豆克数不能大于投豆克数', icon: 'none' })
+      return
+    }
+
     const metrics = computeRoastMetrics({
-      greenGrams: Number(greenGrams) || 0,
-      outGrams: Number(outGrams) || 0,
+      greenGrams: green,
+      outGrams: out,
       totalSeconds: total,
       events
     })
@@ -87,39 +156,62 @@ export default function RoastEditPage() {
     const payload: RoastBatchPayload = {
       beanId,
       batchNo: batchNo.trim(),
+      submissionId,
       roaster: roaster.trim() || '未指定烘豆机',
-      greenGrams: Number(greenGrams) || 0,
-      outGrams: Number(outGrams) || 0,
+      greenGrams: green,
+      outGrams: out,
       totalSeconds: total,
       events,
       ...metrics,
       curve: generateRoastCurve(events, total),
-      roastDate: new Date().toISOString()
+      roastLevel,
+      roastDate: timestamp.toISOString()
     }
 
+    setSaving(true)
     try {
-      await api.createRoast(payload)
+      if (existing) {
+        await api.updateRoast(existing.id, {
+          batchNo: payload.batchNo, roaster: payload.roaster,
+          greenGrams: green, outGrams: out, roastLevel
+        })
+      } else {
+        await api.createRoast(payload)
+      }
+      void queryClient.invalidateQueries({ queryKey: ['roast', roastId] })
+      void queryClient.invalidateQueries({ queryKey: ['bean', beanId] })
+      void queryClient.invalidateQueries({ queryKey: ['beanRoasts', beanId] })
+      void queryClient.invalidateQueries({ queryKey: ['beans'] })
+      void queryClient.invalidateQueries({ queryKey: ['roasts'] })
+      void queryClient.invalidateQueries({ queryKey: ['summary'] })
       Taro.showToast({ title: '已保存', icon: 'success' })
-      setTimeout(() => Taro.navigateBack(), 600)
-    } catch {
-      Taro.showToast({ title: '保存失败', icon: 'none' })
+      await Taro.navigateBack()
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : '保存失败'
+      Taro.showToast({ title: message, icon: 'none' })
+    } finally {
+      setSaving(false)
     }
+  }
+
+  if (roastId && !loaded) {
+    return <View className={`page ${themeClass}`}><Text>{isError ? '读取炉次失败' : '加载中…'}</Text></View>
   }
 
   return (
     <View className={`page ${themeClass}`}>
       <View className="page__header">
         <Text className="eyebrow">NEW ROAST</Text>
-        <Text className="page__title">添加烘焙批次</Text>
-        <Text className="dim list-sub">按事件打点保存，系统据此合成烘焙曲线</Text>
+        <Text className="page__title">{existing ? '更正烘焙批次' : '添加烘焙批次'}</Text>
+        {!existing && <Text className="dim list-sub">按事件打点保存，系统据此合成烘焙曲线</Text>}
       </View>
 
       <View className="page__body">
-        {/* 豆子 */}
-        <View className="block">
-          <Text className="section-title">所属豆子</Text>
+        {/* 豆子：烘焙入口仅对生豆开放 */}
+        {!existing && <View className="block">
+          <Text className="section-title">所属生豆</Text>
           <View className="chips">
-            {(beans?.items ?? []).map(b => (
+            {greenBeans.map(b => (
               <View
                 key={b.id}
                 className={beanId === b.id ? 'tag tag--active' : 'tag'}
@@ -129,7 +221,30 @@ export default function RoastEditPage() {
               </View>
             ))}
           </View>
-          {!beans?.items.length && <View className="empty empty--inline">豆仓还没有豆子</View>}
+          {!greenBeans.length && (
+            <View className="empty empty--inline">
+              没有可烘焙的生豆{'\n'}成品豆可直接冲煮，不需要烘焙
+            </View>
+          )}
+        </View>}
+
+        {/* 每炉烘焙度 */}
+        <View className="block">
+          <Text className="section-title">本炉烘焙度</Text>
+          <View className="chips">
+            {ROASTS.map(r => (
+              <View
+                key={r}
+                className={roastLevel === r ? 'tag tag--active' : 'tag'}
+                onClick={() => setRoastLevel(r)}
+              >
+                {ROAST_LEVEL_LABELS[r]}
+              </View>
+            ))}
+          </View>
+          <Text className="param__hint mute">
+            同一批生豆可分多炉，每炉的烘焙度独立保存
+          </Text>
         </View>
 
         {/* 批次 */}
@@ -175,10 +290,19 @@ export default function RoastEditPage() {
         </View>
 
         {/* 事件打点 */}
-        <View className="block">
+        {!existing && <View className="block">
           <Text className="section-title">事件打点</Text>
           <Text className="param__hint mute">时间用「分:秒」或秒数都可以</Text>
           <View className="form">
+            <View className="form__row">
+              <Text className="form__label">下豆时间</Text>
+              <Picker mode="date" value={roastDay} onChange={e => setRoastDay(String(e.detail.value))}>
+                <Text>{roastDay}</Text>
+              </Picker>
+              <Picker mode="time" value={roastTime} onChange={e => setRoastTime(String(e.detail.value))}>
+                <Text>{roastTime}</Text>
+              </Picker>
+            </View>
             <View className="form__row">
               <Text className="form__label">投豆温度</Text>
               <Input
@@ -236,11 +360,11 @@ export default function RoastEditPage() {
           <Text className="param__hint mute">
             预计总时长 {toMMSS(parseTime(totalTime))} · 回温点由曲线最低点自动推算
           </Text>
-        </View>
+        </View>}
 
         <View className="actions">
-          <View className="btn btn--primary" onClick={save}>
-            保存批次
+          <View className="btn btn--primary" onClick={saving ? undefined : save}>
+            {saving ? '保存中…' : '保存批次'}
           </View>
         </View>
       </View>

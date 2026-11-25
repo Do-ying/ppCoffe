@@ -1,0 +1,209 @@
+/* 跨端线性图标（真实子元素绘制，跟随主题色）
+ *
+ * 统一线宽 2rpx，圆头圆角，尺寸由外层 style 控制。
+ * 颜色用 currentColor —— 组件上通过 style 传入 color，
+ * 或继承 var(--text-mute)，自动跟随深浅主题。
+ */
+
+.ico {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-block;
+  color: var(--text-mute);
+  box-sizing: border-box;
+}
+
+.ico__part {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2rpx solid currentColor;
+}
+
+/* ---------- 咖啡杯 ---------- */
+/* 杯身：上宽下窄的梯形杯 + 杯口横线 */
+.ico__cup-body {
+  left: 14%;
+  top: 30%;
+  width: 54%;
+  height: 48%;
+  border-top: none;
+  border-radius: 0 0 42% 42%;
+  transform: perspective(40rpx) rotateX(-4deg);
+}
+
+/* 杯柄：右侧的圆弧 */
+.ico__cup-handle {
+  right: 8%;
+  top: 36%;
+  width: 20%;
+  height: 28%;
+  border-left: none;
+  border-radius: 0 60% 60% 0;
+}
+
+/* ---------- 风味雷达 ---------- */
+.ico__radar-outer {
+  inset: 8%;
+  border-radius: 50%;
+}
+
+.ico__radar-inner {
+  left: 50%;
+  top: 50%;
+  width: 46%;
+  height: 46%;
+  border-radius: 50%;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  transform: translate(-50%, -50%);
+}
+
+/* ---------- 咖啡豆 ---------- */
+.ico__bean-body {
+  left: 18%;
+  top: 8%;
+  width: 64%;
+  height: 84%;
+  border-radius: 50%;
+  transform: rotate(-28deg);
+}
+
+.ico__bean-seam {
+  left: 50%;
+  top: 18%;
+  width: 2rpx;
+  height: 64%;
+  background: currentColor;
+  border: none;
+  border-radius: 2rpx;
+  transform: translateX(-50%) rotate(-28deg);
+}
+
+/* ---------- 记录（铅笔）---------- */
+.ico__record-body {
+  left: 30%;
+  top: 14%;
+  width: 40%;
+  height: 58%;
+  border-radius: 4rpx;
+  transform: rotate(38deg);
+}
+
+.ico__record-tip {
+  left: 26%;
+  bottom: 14%;
+  width: 46%;
+  height: 2rpx;
+  background: currentColor;
+  border: none;
+  border-radius: 2rpx;
+}
+
+/* ---------- 器具（扳手）---------- */
+.ico__tool-handle {
+  left: 14%;
+  top: 36%;
+  width: 62%;
+  height: 20%;
+  border-radius: 4rpx;
+  transform: rotate(-32deg);
+}
+
+.ico__tool-head {
+  right: 8%;
+  top: 14%;
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+}
+
+/* ---------- 烘焙（火焰）---------- */
+.ico__flame-outer {
+  left: 26%;
+  top: 10%;
+  width: 48%;
+  height: 74%;
+  border-radius: 50% 50% 46% 46% / 66% 66% 34% 34%;
+}
+
+.ico__flame-inner {
+  left: 38%;
+  top: 42%;
+  width: 24%;
+  height: 32%;
+  border-radius: 50% 50% 46% 46% / 66% 66% 34% 34%;
+}
+
+/* ---------- 磨豆机 ---------- */
+.ico__grinder-hopper {
+  left: 22%;
+  top: 22%;
+  width: 56%;
+  height: 40%;
+  border-radius: 4rpx 4rpx 0 0;
+}
+
+.ico__grinder-base {
+  left: 30%;
+  bottom: 16%;
+  width: 40%;
+  height: 26%;
+  border-radius: 0 0 4rpx 4rpx;
+}
+
+/* ---------- 豆仓（麻袋）---------- */
+.ico__bag-body {
+  left: 22%;
+  top: 16%;
+  width: 56%;
+  height: 70%;
+  border-radius: 6rpx 6rpx 14rpx 14rpx;
+}
+
+.ico__bag-top {
+  left: 34%;
+  top: 8%;
+  width: 32%;
+  height: 12%;
+  border-radius: 4rpx;
+}
+
+/* ---------- 图片 ---------- */
+.ico__image-frame {
+  inset: 10%;
+  border-radius: 4rpx;
+}
+
+.ico__image-dot {
+  left: 26%;
+  bottom: 24%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+}
+
+/* ---------- 尺寸档位 ----------
+ *
+ * ⚠️ 不能用行内 style 的 rpx：Taro H5 不转换行内样式的 rpx，
+ *    `width:28rpx` 会被当非法长度丢弃 → 元素塌成 0×0（实测）。
+ *    统一用类名给尺寸。
+ */
+.ico--xs {
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+.ico--sm {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+.ico--md {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ico--lg {
+  width: 0.9rem;
+  height: 0.9rem;
+}

@@ -276,3 +276,18 @@
 .actions {
   margin-top: var(--sp-5);
 }
+
+/* Markdown 预览区（保存前的实时渲染） */
+.note-preview {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.note-preview__label {
+  display: block;
+  margin-bottom: 6rpx;
+  font-size: var(--fs-xs);
+}

@@ -53,3 +53,23 @@ export async function uploadBrewImage(filePath: string, sizeBytes = 0): Promise<
     sizeBytes
   }
 }
+
+/**
+ * 上传一张豆子封面。
+ *
+ * 计划书第五节：复用 `POST /uploads` 的 JSON 图片上传入口，
+ * 为豆子图片传入用途 `bean`。保存时先上传文件，
+ * 再用返回的对象键关联豆子。
+ */
+export async function uploadBeanCover(
+  filePath: string,
+  sizeBytes = 0
+): Promise<{ objectKey: string; url: string }> {
+  const dataUri = await readImageAsDataUri(filePath)
+  const format = /^data:image\/(jpeg|png|webp|gif);base64,/.exec(dataUri)?.[1]
+  if (!format) throw new Error('请选择 JPG、PNG、WebP 或 GIF 图片')
+  const extension = format === 'jpeg' ? 'jpg' : format
+  const filename = `bean/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+  const upload = await api.createUpload({ filename, dataUri, sizeBytes, purpose: 'bean' })
+  return { objectKey: upload.objectKey, url: upload.url }
+}

@@ -34,6 +34,8 @@ export interface BrewDraft {
   /** 附图 */
   images: BrewImage[]
   beanId?: string
+  /** 关联的烘焙炉次（生豆必填；成品豆留空） */
+  roastBatchId?: string
   /** 记录深度档位 */
   depth: 'quick' | 'standard' | 'cupping'
 }
@@ -82,6 +84,7 @@ interface BrewDraftState {
   addImage: (img: BrewImage) => void
   removeImage: (id: string) => void
   setBeanId: (id: string) => void
+  setRoastBatchId: (id?: string) => void
   setDepth: (d: BrewDraft['depth']) => void
   reset: () => void
 }
@@ -172,6 +175,9 @@ export const useBrewDraft = create<BrewDraftState>((set, get) => ({
   },
 
   setBeanId: beanId => set({ draft: { ...get().draft, beanId } }),
+
+  setRoastBatchId: roastBatchId =>
+    set({ draft: { ...get().draft, roastBatchId } }),
 
   setDepth: depth => set({ draft: { ...get().draft, depth } }),
 

@@ -9,6 +9,7 @@ from .bean import Bean
 from .brew import BrewCurve, BrewRecord
 from .misc import Equipment, Recipe, Upload
 from .mixins import TimestampMixin, to_iso, utcnow
+from .rest import REST_EVENT_TYPES, RestEvent
 from .roast import RoastBatch, RoastCurve
 from .user import User
 
@@ -17,7 +18,9 @@ __all__ = [
     "BrewCurve",
     "BrewRecord",
     "Equipment",
+    "REST_EVENT_TYPES",
     "Recipe",
+    "RestEvent",
     "RoastBatch",
     "RoastCurve",
     "Upload",

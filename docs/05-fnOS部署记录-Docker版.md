@@ -139,9 +139,13 @@ ssh fnos 'cd /vol2/1000/public/ppcoffe && \
     docker compose --profile minio build web && \
     docker compose --profile minio up -d --no-build'
 
-# 6) 建表 + 演示数据
+# 6) 建表 + 增量迁移 + 演示数据
+# ⚠️ migrate 必须在 init-db 之后 —— init-db 只建新表的结构，
+#    migrate 才给既有库补新列（豆仓分类新增 beans.kind / beans.purchase_cost_cents /
+#    roasts.roast_level 与 rest_events 表）。幂等，只增不删。
 ssh fnos 'cd /vol2/1000/public/ppcoffe && \
     docker compose exec -T api python manage.py init-db && \
+    docker compose exec -T api python manage.py migrate && \
     docker compose exec -T api python manage.py seed'
 ```
 
@@ -372,6 +376,47 @@ remote_port = 4013
 
 > 备注：`mc ls` 在不带 root 凭据时报 Access Denied 属预期 ——
 > 这正说明应用账号 `ppcoffe` 的权限隔离生效（只能访问那三个业务桶）。
+
+### 6.1 豆仓分类与批次管理实施计划的验收（2026-11-25）
+
+计划书六大阶段全部落地并部署。本轮额外修掉两个**只有真实链路才会暴露**的上传断点：
+
+| 断点 | 现象 | 根因 | 修复 |
+|---|---|---|---|
+| `presign` 用途白名单 | 豆子封面走 `presign` 直传会被 422 拒 | `PresignSchema.purpose` 的 `OneOf` 只有 `brew` / `roast`，缺 `bean` | 白名单加 `bean`（`schemas.py` + `openapi.py` 同步） |
+| 直传不落上传记录 | 封面键建豆时被拒（`图片不存在或已失效`） | `presign` 只返回地址，**从不写 `uploads` 表**；而 `POST /beans` 要求 `sourceFileKey` 必须是当前用户的已登记上传记录 | `presign` 在返回地址时**同步登记**一条 `uploads` 记录（`owner_type = purpose`） |
+
+端到端验证（fnOS 本机，真实 API + 真实 MinIO，脚本 `/tmp/e2e-v2.py`）：
+
+| 检查项 | 结果 |
+|---|---|
+| `docker compose ps` | ✅ 4 个服务 healthy（api / minio / redis / web） |
+| `POST /uploads/presign` purpose=bean | ✅ 200，对象键 `bean/local/<uuid>.png` |
+| 按预签名地址 PUT 直传 | ✅ 200 |
+| 按预签名地址 GET 回读 | ✅ 200，内容逐字节一致 |
+| 用预签名键建豆 | ✅ 201，返回 `sourceFileKey` 与有效 `imageUrl` |
+| 豆仓列表带出封面 | ✅ `imageUrl` 为按 `sourceFileKey` 实时生成的预签名 GET |
+| `purpose` 非法值 | ✅ 422 |
+| `POST /uploads` purpose=bean | ✅ 201，对象键 `bean/...` |
+| 生豆 1000g / 120 元 | ✅ 每克成本 0.12 |
+| 烘焙 300g | ✅ 已用 300 / 剩余 700，成本不变 |
+| 养豆事件（带炉次） | ✅ 201 |
+| 生豆冲煮（带炉次） | ✅ 201，`review` 原文保留 |
+| 生豆冲煮漏选炉次 | ✅ 422（`field=roastBatchId`） |
+| 养豆事件漏选炉次 | ✅ 422 |
+| 类型锁定 | ✅ 409 |
+| 投豆超出购入克数 | ✅ 409 |
+| 未登记对象键建豆 | ✅ 422 |
+| 后端 pytest | ✅ 86 passed |
+| 前端 typecheck | ✅ exit 0 |
+| Markdown 自检 | ✅ 22 项通过 |
+
+> **预签名地址在本机验证时的做法**：把 `https://ppminio.lovexpw.cn` 换成 `http://127.0.0.1:19000`，
+> 但**保留 `Host: ppminio.lovexpw.cn` 头** —— 等价于 frp 的 `hostHeaderRewrite`，
+> SigV4 校验的是 Host 值而非 scheme，因此签名依然有效。
+
+> ⚠️ **外部访问仍被阿里云拦截**：三个域名返回 `Non-compliance ICP Filing`（`lovexpw.cn` 未备案）。
+> 阿里云本机访问三个域名均 200，说明 frp 与后端链路本身正常，**这是备案问题，代码侧无法绕过**。
 
 ---
 

@@ -57,6 +57,10 @@ class RoastBatch(Base, TimestampMixin):
     source_file_key: Mapped[Optional[str]] = mapped_column(
         String(512), nullable=True, comment=".alog 原文件对象键"
     )
+    #: 每炉的烘焙度（生豆分多炉时，各炉独立）
+    roast_level: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True, comment="每炉烘焙度"
+    )
 
     curve: Mapped[Optional["RoastCurve"]] = relationship(
         back_populates="roast", uselist=False, cascade="all, delete-orphan", lazy="selectin"
@@ -83,9 +87,27 @@ class RoastBatch(Base, TimestampMixin):
             data["cuppingScore"] = self.cupping_score
         if self.notes:
             data["notes"] = self.notes
+        # 每炉烘焙度（生豆分多炉时各炉独立）
+        data["roastLevel"] = self.roast_level
+        # 炉次是否完成：以有效的下豆时间与投豆/出豆量为准
+        data["completed"] = self.is_completed()
         if with_curve and self.curve is not None:
             data["curve"] = self.curve.to_dict()
         return data
+
+    def is_completed(self) -> bool:
+        """炉次是否完成（可用于冲煮与养豆事件）。
+
+        完成以有效的下豆时间和投豆、出豆量为准。
+        """
+        events = self.events or []
+        drop = next((e for e in events if e.get("type") == "drop"), None)
+        seconds = drop.get("atSecond") if drop else None
+        return (
+            isinstance(seconds, (int, float))
+            and 0 < seconds < float("inf")
+            and 0 < (self.out_grams or 0) <= (self.green_grams or 0)
+        )
 
 
 class RoastCurve(Base, TimestampMixin):

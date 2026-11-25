@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import current_app, request
@@ -155,11 +155,11 @@ def parse_date(value: Any, *, name: str) -> Optional[date]:
 def parse_datetime(value: Any, *, name: str) -> Optional[datetime]:
     if not value:
         return None
-    if isinstance(value, datetime):
-        return value
-    text = str(value).strip().replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(text).replace(tzinfo=None)
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+            str(value).strip().replace("Z", "+00:00")
+        )
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
     except ValueError:
         raise InvalidParam(f"参数 {name} 必须是 ISO 8601 时间")
 

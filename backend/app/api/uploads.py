@@ -57,18 +57,35 @@ def presign():
     """申请直传目标（预签名 PUT）。"""
     data = parse_with(PresignSchema())
     purpose = data.get("purpose") or "brew"
-    object_key = _build_object_key(purpose, data["filename"], data.get("contentType"))
+    content_type = data.get("contentType") or "image/jpeg"
+    object_key = _build_object_key(purpose, data["filename"], content_type)
 
     storage = get_storage()
-    upload_url = storage.presign_put(object_key, data.get("contentType") or "image/jpeg", PRESIGN_TTL)
+    upload_url = storage.presign_put(object_key, content_type, PRESIGN_TTL)
     public_url = storage.public_url(object_key)
+
+    # 登记上传记录：计划书第五节要求豆子封面键必须对应当前用户的上传记录，
+    # 而封面走的是预签名直传（不经 POST /uploads），故在申请地址时先行登记。
+    user = current_user()
+    record = Upload(
+        id=new_id("img"),
+        user_id=user.id if user else None,
+        object_key=object_key,
+        bucket=None,
+        url=public_url,
+        content_type=content_type,
+        size_bytes=data.get("sizeBytes") or 0,
+        owner_type=purpose,
+    )
+    db.session.add(record)
+    db.session.commit()
 
     return ok(
         {
             "objectKey": object_key,
             "uploadUrl": upload_url,
             "publicUrl": public_url,
-            "headers": {"Content-Type": data.get("contentType") or "image/jpeg"},
+            "headers": {"Content-Type": content_type},
             "expiresIn": PRESIGN_TTL,
         }
     )
@@ -106,7 +123,9 @@ def upload():
     if not content:
         raise ValidationFailed("文件内容为空", field="dataUri")
 
-    object_key = _build_object_key("brew", data["filename"], content_type)
+    # 尊重调用方传入的用途（brew / bean）—— 豆子封面走 bean 前缀
+    purpose = (data.get("purpose") or "brew").strip() or "brew"
+    object_key = _build_object_key(purpose, data["filename"], content_type)
     storage = get_storage()
     public_url = storage.put_object(object_key, content, content_type or "application/octet-stream")
 
@@ -120,6 +139,7 @@ def upload():
         content_type=content_type,
         size_bytes=size_bytes or len(content),
         caption=data.get("caption"),
+        owner_type=purpose,
     )
     db.session.add(record)
     db.session.commit()

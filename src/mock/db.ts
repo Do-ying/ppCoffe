@@ -5,12 +5,14 @@ import type {
   BrewCurve,
   Equipment,
   FlavorProfile,
+  RestEvent,
   RoastBatch,
   RoastCurvePoint
 } from '../domain/types'
 import { BREW_METHODS } from '../domain/methods'
 import { generatePlanCurve } from '../domain/curve/generate'
 import { generateRoastCurve } from '../domain/curve/roast'
+import { restStageInfo } from '../domain/rest'
 import type { RequestOptions, Transport } from '../services/http'
 
 /**
@@ -27,15 +29,17 @@ const now = () => new Date().toISOString()
 const beanFixtures: Bean[] = [
   {
     id: 'bn_eth_01',
+    kind: 'green',
     name: '耶加雪菲 · 科契尔 水洗 G1',
     roaster: '几何咖啡',
     origin: { country: '埃塞俄比亚', region: 'Sidama', farm: 'Kochere', altitudeMasl: 1950, variety: '74158' },
     process: 'washed',
     roastLevel: 'light',
     agtron: 62,
-    roastDate: '2026-11-10',
-    weightGrams: 200,
-    remainingGrams: 120,
+    roastDate: null,
+    weightGrams: 1000,
+    remainingGrams: 500,
+    purchaseCostCents: 12000,
     tags: ['花果香'],
     notes: '柑橘与白桃，尾段有红茶感',
     createdAt: '2026-11-10T10:00:00Z',
@@ -43,6 +47,7 @@ const beanFixtures: Bean[] = [
   },
   {
     id: 'bn_col_02',
+    kind: 'purchased_roasted',
     name: '哥伦比亚 · 慧兰 慢速日晒',
     roaster: '乔治队长',
     origin: { country: '哥伦比亚', region: 'Huila', farm: 'El Diviso', altitudeMasl: 1800 },
@@ -58,6 +63,7 @@ const beanFixtures: Bean[] = [
   },
   {
     id: 'bn_br_03',
+    kind: 'purchased_roasted',
     name: '巴西 · 喜拉多 拼配',
     roaster: '自有烘焙',
     origin: { country: '巴西', region: 'Minas Gerais' },
@@ -182,6 +188,8 @@ const roastFixtures: RoastBatch[] = [
   {
     id: 'rb_001',
     beanId: 'bn_eth_01',
+    completed: true,
+    roastLevel: 'light',
     batchNo: '2026-1110-A',
     roaster: 'Aillio Bullet R2',
     greenGrams: 500,
@@ -285,6 +293,7 @@ interface MockDb {
   roasts: RoastBatch[]
   equipment: Equipment[]
   uploads: BrewImage[]
+  restEvents: RestEvent[]
 }
 
 const db: MockDb = {
@@ -306,7 +315,42 @@ const db: MockDb = {
     }
   })),
   equipment: [...equipmentFixtures],
-  uploads: []
+  uploads: [],
+  restEvents: []
+}
+
+
+/** 豆子响应补全：库存汇总 + 每克成本 + 养豆阶段（与后端 app/api/beans.py 的 _bean_payload 对齐）。 */
+function beanPayload(bean: Bean): Bean {
+  const roasts = db.roasts.filter(r => r.beanId === bean.id)
+  const used = roasts
+    .filter(r => r.completed !== false && (r.greenGrams || 0) > 0)
+    .reduce((sum, r) => sum + (r.greenGrams || 0), 0)
+  const purchased = bean.weightGrams || 0
+  const isGreen = bean.kind === 'green'
+  const pending = isGreen && (used > purchased || roasts.some(r => !(0 < r.outGrams && r.outGrams <= r.greenGrams)))
+
+  const costPerGram =
+    bean.purchaseCostCents != null && purchased > 0
+      ? Math.round((bean.purchaseCostCents / 100 / purchased) * 10000) / 10000
+      : undefined
+
+  const roastDate = isGreen
+    ? (roasts.filter(r => r.completed !== false).sort((a, b) => (b.roastDate > a.roastDate ? 1 : -1))[0]?.roastDate ?? null)
+    : bean.roastDate
+
+  return {
+    ...bean,
+    roastLevel: isGreen ? null : bean.roastLevel,
+    imageUrl: bean.sourceFileKey
+      ? db.uploads.find(upload => upload.objectKey === bean.sourceFileKey)?.url ?? bean.imageUrl
+      : bean.imageUrl,
+    usedGreenGrams: isGreen ? (pending ? undefined : used) : undefined,
+    remainingGrams: isGreen ? (pending ? undefined : Math.max(purchased - used, 0)) : bean.remainingGrams,
+    stockPending: isGreen ? pending : false,
+    costPerGram,
+    restStage: restStageInfo(roastDate)
+  }
 }
 
 let seq = 100
@@ -345,9 +389,48 @@ export const mockTransport: Transport = {
       return { version: 'SCA-2016-WCR', categories: FLAVOR_CATEGORIES, defects: FLAVOR_DEFECTS } as T
     }
 
+
+    // 养豆事件：/beans/{beanId}/rest-events
+    if (url.includes('/rest-events')) {
+      const parts = url.split('/')
+      const beanId = parts[2]
+      const eventId = parts[4]
+      const bean = db.beans.find(b => b.id === beanId)
+      if (!bean) notFound('豆子')
+
+      if (method === 'GET') {
+        return {
+          items: db.restEvents.filter(e => e.beanId === beanId).sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
+        } as T
+      }
+      if (method === 'POST') {
+        const event = {
+          ...body,
+          id: nextId('re'),
+          beanId,
+          createdAt: now(),
+          updatedAt: now()
+        } as RestEvent
+        db.restEvents.unshift(event)
+        return event as T
+      }
+      if (method === 'PATCH' && eventId) {
+        const idx = db.restEvents.findIndex(e => e.id === eventId)
+        if (idx < 0) notFound('养豆事件')
+        db.restEvents[idx] = { ...db.restEvents[idx], ...body, updatedAt: now() }
+        return db.restEvents[idx] as T
+      }
+      if (method === 'DELETE' && eventId) {
+        const idx = db.restEvents.findIndex(e => e.id === eventId)
+        if (idx < 0) notFound('养豆事件')
+        db.restEvents.splice(idx, 1)
+        return { ok: true } as T
+      }
+    }
+
     // 豆子
     if (url === '/beans' && method === 'GET') {
-      return { items: db.beans } as T
+      return { items: db.beans.map(beanPayload) } as T
     }
     if (url === '/beans' && method === 'POST') {
       const bean = {
@@ -357,20 +440,28 @@ export const mockTransport: Transport = {
         updatedAt: now()
       } as Bean
       db.beans.unshift(bean)
-      return bean as T
+      return beanPayload(bean) as T
     }
-    if (url.startsWith('/beans/') && method === 'GET') {
+    if (/^\/beans\/[^/]+$/.test(url) && method === 'GET') {
       const id = url.split('/')[2]
       const bean = db.beans.find(b => b.id === id)
       if (!bean) notFound('豆子')
-      return bean as T
+      return beanPayload(bean) as T
     }
     if (url.startsWith('/beans/') && method === 'PATCH') {
       const id = url.split('/')[2]
       const idx = db.beans.findIndex(b => b.id === id)
       if (idx < 0) notFound('豆子')
       db.beans[idx] = { ...db.beans[idx], ...body, updatedAt: now() }
-      return db.beans[idx] as T
+      return beanPayload(db.beans[idx]) as T
+    }
+    if (/^\/beans\/[^/]+$/.test(url) && method === 'DELETE') {
+      const id = url.split('/')[2]
+      db.beans = db.beans.filter(bean => bean.id !== id)
+      db.brews = db.brews.filter(brew => brew.beanId !== id)
+      db.roasts = db.roasts.filter(roast => roast.beanId !== id)
+      db.restEvents = db.restEvents.filter(event => event.beanId !== id)
+      return { ok: true } as T
     }
     if (url.startsWith('/beans/') && url.endsWith('/brews')) {
       const id = url.split('/')[2]
@@ -387,9 +478,21 @@ export const mockTransport: Transport = {
       return { items: list } as T
     }
     if (url === '/brews' && method === 'POST') {
+      const bean = db.beans.find(item => item.id === body.beanId)
+      if (!bean?.kind) throw new Error('请先确认豆子类型')
+      if (bean.kind === 'green' && !db.roasts.some(roast =>
+        roast.id === body.roastBatchId && roast.beanId === bean.id && roast.completed
+      )) throw new Error('生豆冲煮需选择已完成的烘焙炉次')
+      if (bean.kind === 'purchased_roasted' && body.roastBatchId) throw new Error('成品豆冲煮无需关联炉次')
+      const methodMeta = BREW_METHODS.find(m => m.id === body.method)
+      if (!methodMeta) notFound('冲煮方式')
       const brew = {
         ...body,
         id: nextId('br'),
+        brewDate: body.brewDate ?? now(),
+        curve: body.curve ?? generatePlanCurve(
+          body.steps?.length ? body.steps : methodMeta.defaultSteps, body.params?.brewSeconds ?? 180
+        ),
         createdAt: now(),
         updatedAt: now()
       } as BrewRecord
@@ -447,13 +550,25 @@ export const mockTransport: Transport = {
       return { items: db.roasts } as T
     }
     if (url === '/roasts' && method === 'POST') {
+      const bean = db.beans.find(item => item.id === body.beanId)
+      if (!bean) notFound('豆子')
+      if (bean.kind !== 'green') throw new Error('只有生豆可以新增烘焙批次')
+      const submissionId = body.submissionId
+      const existing = submissionId && db.roasts.find(roast =>
+        roast.beanId === bean.id && roast.id === `rb_${submissionId}`
+      )
+      if (existing) return existing as T
+      const remaining = beanPayload(bean).remainingGrams
+      if (remaining != null && body.greenGrams > remaining) throw new Error('生豆用量超出购入克数')
       // 请求体的 curve 是点数组，落库后读取形态是对象 —— 模拟后端的转换
       const payload = body as Partial<RoastBatch> & { curve?: RoastCurvePoint[] }
       const { curve: points, ...rest } = payload
-      const id = nextId('rb')
+      const id = submissionId ? `rb_${submissionId}` : nextId('rb')
       const roast = {
         ...rest,
         id,
+        completed: !!rest.events?.some(e => e.type === 'drop' && e.atSecond > 0) &&
+          (rest.outGrams ?? 0) > 0 && (rest.outGrams ?? 0) <= (rest.greenGrams ?? 0),
         curve: points
           ? {
               id: `cv_${id}`,
@@ -474,6 +589,28 @@ export const mockTransport: Transport = {
       const id = url.split('/')[2]
       const roast = db.roasts.find(r => r.id === id)
       if (!roast) notFound('烘焙批次')
+      return roast as T
+    }
+    if (url.startsWith('/roasts/') && (method === 'PATCH' || method === 'DELETE')) {
+      const id = url.split('/')[2]
+      const index = db.roasts.findIndex(roast => roast.id === id)
+      if (index < 0) notFound('烘焙批次')
+      if (method === 'DELETE') {
+        if (db.brews.some(brew => brew.roastBatchId === id) ||
+          db.restEvents.some(event => event.roastBatchId === id)) {
+          throw new Error('请先处理关联的冲煮和养豆记录')
+        }
+        db.roasts.splice(index, 1)
+        return { ok: true } as T
+      }
+      const roast = { ...db.roasts[index], ...body }
+      const parent = db.beans.find(bean => bean.id === roast.beanId)
+      if (parent?.kind === 'green' && body.greenGrams != null) {
+        const available = (beanPayload(parent).remainingGrams ?? 0) + db.roasts[index].greenGrams
+        if (roast.greenGrams > available) throw new Error('生豆用量超出购入克数')
+      }
+      roast.weightLossPercent = (roast.greenGrams - roast.outGrams) / roast.greenGrams * 100
+      db.roasts[index] = roast
       return roast as T
     }
 
@@ -551,17 +688,19 @@ export const mockTransport: Transport = {
           avgFlavor: Number(avg.toFixed(1))
         },
         week: { brewCount: weekBrews.length, avgFlavor: Number(avg.toFixed(1)), byMethod },
-        restingBeans: db.beans.map(b => {
-          const days = Math.floor(
-            (Date.now() - new Date(b.roastDate).getTime()) / 86400000
-          )
-          return {
-            beanId: b.id,
-            name: b.name,
-            roastDate: b.roastDate,
-            daysSinceRoast: days,
-            stage: days < 7 ? 'resting' : days <= 21 ? 'peak' : 'fading'
-          }
+        restingBeans: db.beans.flatMap(bean => {
+          const sources = bean.kind === 'green'
+            ? db.roasts.filter(roast => roast.beanId === bean.id && roast.completed)
+              .map(roast => ({ roastDate: roast.roastDate, roastBatchId: roast.id, batchNo: roast.batchNo }))
+            : [{ roastDate: bean.roastDate }]
+          return sources.flatMap(source => {
+            const info = restStageInfo(source.roastDate)
+            if (info.days == null || !info.roastDate || info.stage === 'unknown') return []
+            return [{
+              ...source, beanId: bean.id, name: bean.name, roastDate: info.roastDate,
+              daysSinceRoast: info.days, stage: info.stage
+            }]
+          })
         }),
         activeSession: null
       } as T

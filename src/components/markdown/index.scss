@@ -1,0 +1,110 @@
+/* 跨端 Markdown 渲染样式
+ *
+ * 用 rem 而非 rpx：Taro H5 会把 rpx 换算成 rem，H5 与小程序表现一致。
+ */
+
+.md {
+  display: block;
+}
+
+.md--compact {
+  font-size: var(--fs-sm);
+}
+
+.md__text {
+  display: inline;
+}
+
+.md__bold {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.md__italic {
+  font-style: italic;
+}
+
+.md__code {
+  padding: 0 6rpx;
+  border-radius: 6rpx;
+  background: var(--surface-3);
+  color: var(--signal);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.md__h {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  margin: var(--sp-3) 0 var(--sp-1);
+}
+
+.md__h1 {
+  font-size: var(--fs-lg);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6rpx;
+}
+
+.md__h2 {
+  font-size: var(--fs-md);
+}
+
+.md__h3 {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.md__p {
+  display: block;
+  margin: var(--sp-1) 0;
+  line-height: 1.7;
+}
+
+.md__quote {
+  display: block;
+  margin: var(--sp-2) 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 3px solid var(--signal-dim);
+  background: var(--surface);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  color: var(--text-dim);
+}
+
+.md__list {
+  display: block;
+  margin: var(--sp-1) 0;
+}
+
+.md__item {
+  display: flex;
+  align-items: flex-start;
+  margin: 4rpx 0;
+}
+
+.md__marker {
+  flex-shrink: 0;
+  width: 36rpx;
+  color: var(--signal);
+  font-family: var(--font-mono);
+}
+
+.md__item-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.7;
+}
+
+.md__codeblock {
+  display: block;
+  margin: var(--sp-2) 0;
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+}

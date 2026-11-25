@@ -31,6 +31,25 @@
   align-items: baseline;
 }
 
+/* 封面缩略图 */
+.bean__cover {
+  flex-shrink: 0;
+  width: 96rpx;
+  height: 96rpx;
+  margin-right: var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.bean__head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
 .bean__name {
   flex: 1;
   font-size: var(--fs-lg);
@@ -87,4 +106,10 @@
 
 .bean__roast__meta {
   font-size: var(--fs-xs);
+}
+.bean__cover--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-mute);
 }

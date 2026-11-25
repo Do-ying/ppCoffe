@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import binascii
 import csv
+import hashlib
 import io
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,10 +23,14 @@ from ..errors import ApiError, Conflict, NotFound, ValidationFailed
 from ..extensions import db
 from ..ids import new_id
 from ..models.bean import Bean
+from ..models.brew import BrewRecord
 from ..models.mixins import utcnow
+from ..models.rest import RestEvent
 from ..models.roast import RoastBatch, RoastCurve
 from ..schemas import CompareRoastsSchema, RoastCreateSchema, RoastImportSchema, RoastUpdateSchema
 from ..security import current_user, ensure_owner
+from ..services import cache
+from ..services.validation import assert_roast_quantity, lock_bean_for_stock
 from .helpers import page_size, paginate, parse_datetime, parse_sort, parse_with, scope
 
 bp = Blueprint("roasts", __name__)
@@ -53,6 +58,18 @@ def _get_roast(roast_id: str) -> RoastBatch:
         raise NotFound("烘焙批次不存在")
     ensure_owner(roast, current_user())
     return roast
+
+
+def _require_green(bean: Bean) -> None:
+    if bean.kind != "green":
+        raise ValidationFailed("只有生豆可以新增烘焙批次", field="beanId")
+
+
+def _has_linked_records(roast_id: str) -> bool:
+    return (
+        db.session.query(BrewRecord.id).filter_by(roast_batch_id=roast_id).with_for_update().first() is not None
+        or db.session.query(RestEvent.id).filter_by(roast_batch_id=roast_id).with_for_update().first() is not None
+    )
 
 
 def _recompute(roast: RoastBatch) -> None:
@@ -156,27 +173,41 @@ def list_roasts():
 
 @bp.post("")
 def create_roast():
-    """新建烘焙批次。"""
+    """新建烘焙批次（生豆的一炉）。"""
     data = parse_with(RoastCreateSchema())
     user = current_user()
 
-    if db.session.get(Bean, data["beanId"]) is None:
-        raise ValidationFailed("豆子不存在", details={"beanId": data["beanId"]}, field="beanId")
+    bean = lock_bean_for_stock(data["beanId"])
+    ensure_owner(bean, user)
+    _require_green(bean)
+    roast_id = new_id("rb")
+    if submission_id := data.get("submissionId"):
+        owner = user.id if user else ""
+        digest = hashlib.sha256(f"{bean.id}:{owner}:{submission_id}".encode()).hexdigest()
+        roast_id = f"rb_{digest[:32]}"
+        existing = db.session.get(RoastBatch, roast_id, populate_existing=True, with_for_update=True)
+        if existing is not None:
+            return ok(existing.to_dict(), status=201)
+
+    green_grams = int(data.get("greenGrams") or 0)
+    out_grams = int(data.get("outGrams") or 0)
+    assert_roast_quantity(bean, green_grams, out_grams)
 
     roast = RoastBatch(
-        id=new_id("rb"),
+        id=roast_id,
         user_id=user.id if user else None,
         bean_id=data["beanId"],
         batch_no=data["batchNo"],
         roaster=data.get("roaster"),
-        green_grams=int(data.get("greenGrams") or 0),
-        out_grams=int(data.get("outGrams") or 0),
+        green_grams=green_grams,
+        out_grams=out_grams,
         total_seconds=int(data.get("totalSeconds") or 0),
         events=data.get("events") or [],
         cupping_score=data.get("cuppingScore"),
         notes=data.get("notes"),
         roast_date=parse_datetime(data.get("roastDate"), name="roastDate") or utcnow(),
         target_profile_id=data.get("targetProfileId"),
+        roast_level=data.get("roastLevel"),
     )
     points = data.get("curve") or []
     if points and not roast.events:
@@ -196,8 +227,6 @@ def create_roast():
     db.session.add(roast)
     db.session.commit()
 
-    from ..services import cache
-
     cache.invalidate("stats")
     return ok(roast.to_dict(), status=201)
 
@@ -214,10 +243,29 @@ def update_roast(roast_id: str):
     roast = _get_roast(roast_id)
     data = parse_with(RoastUpdateSchema(), partial=True)
 
-    if "beanId" in data:
-        if db.session.get(Bean, data["beanId"]) is None:
-            raise ValidationFailed("豆子不存在", field="beanId")
-        roast.bean_id = data["beanId"]
+    original_bean_id = roast.bean_id
+    bean_id = data.get("beanId", original_bean_id)
+    locked_beans = {key: lock_bean_for_stock(key) for key in sorted({original_bean_id, bean_id})}
+    for locked in locked_beans.values():
+        ensure_owner(locked, current_user())
+    db.session.refresh(roast, with_for_update=True)
+    if roast.bean_id != original_bean_id:
+        raise Conflict("炉次归属已变更，请刷新后重试")
+    bean = locked_beans[bean_id]
+    moved = bean_id != original_bean_id
+    was_completed = roast.is_completed()
+    if moved:
+        _require_green(bean)
+        if _has_linked_records(roast.id):
+            raise Conflict("已有冲煮或养豆记录的炉次不能更换豆子")
+    if bean.kind == "green" and (moved or {"greenGrams", "outGrams", "events"} & data.keys()):
+        assert_roast_quantity(
+            bean,
+            data.get("greenGrams", roast.green_grams),
+            data.get("outGrams", roast.out_grams),
+            exclude_roast_id=roast.id,
+        )
+    roast.bean_id = bean_id
     if "batchNo" in data:
         roast.batch_no = data["batchNo"]
     if "roaster" in data:
@@ -238,6 +286,11 @@ def update_roast(roast_id: str):
         roast.roast_date = parse_datetime(data.get("roastDate"), name="roastDate") or roast.roast_date
     if "targetProfileId" in data:
         roast.target_profile_id = data.get("targetProfileId")
+    if "roastLevel" in data:
+        roast.roast_level = data.get("roastLevel")
+
+    if was_completed and not roast.is_completed() and _has_linked_records(roast.id):
+        raise Conflict("已有冲煮或养豆记录的炉次须保持已完成")
 
     _recompute(roast)
 
@@ -251,6 +304,7 @@ def update_roast(roast_id: str):
         )
 
     db.session.commit()
+    cache.invalidate("stats")
     return ok(roast.to_dict())
 
 
@@ -258,10 +312,14 @@ def update_roast(roast_id: str):
 def delete_roast(roast_id: str):
     """删除烘焙批次。"""
     roast = _get_roast(roast_id)
+    bean = lock_bean_for_stock(roast.bean_id)
+    db.session.refresh(roast, with_for_update=True)
+    if roast.bean_id != bean.id:
+        raise Conflict("炉次归属已变更，请刷新后重试")
+    if _has_linked_records(roast.id):
+        raise Conflict("请先处理关联的冲煮和养豆记录")
     db.session.delete(roast)
     db.session.commit()
-
-    from ..services import cache
 
     cache.invalidate("stats")
     return ok({"ok": True})
@@ -271,6 +329,10 @@ def delete_roast(roast_id: str):
 def append_event(roast_id: str):
     """追加事件打点（Charge/TP/DE/FC/Drop），并重算指标。"""
     roast = _get_roast(roast_id)
+    bean = lock_bean_for_stock(roast.bean_id)
+    db.session.refresh(roast, with_for_update=True)
+    if roast.bean_id != bean.id:
+        raise Conflict("炉次归属已变更，请刷新后重试")
     body = request.get_json(silent=True) or {}
 
     event_type = body.get("type")
@@ -291,6 +353,10 @@ def append_event(roast_id: str):
         temperature = float(body.get("temperature"))
     except (TypeError, ValueError):
         raise ValidationFailed("atSecond / temperature 必须为数值")
+    if at_second < 0 or (event_type == "drop" and at_second == 0):
+        raise ValidationFailed("事件时间无效", field="atSecond")
+    if bean.kind == "green" and event_type == "drop":
+        assert_roast_quantity(bean, roast.green_grams, roast.out_grams, exclude_roast_id=roast.id)
 
     events = list(roast.events or [])
     events = [e for e in events if e.get("type") != event_type]
@@ -309,6 +375,7 @@ def append_event(roast_id: str):
         _ensure_curve(roast, points, roast.curve.source if roast.curve else "keypoint")
 
     db.session.commit()
+    cache.invalidate("stats")
     return ok(roast.to_dict())
 
 
@@ -318,8 +385,11 @@ def import_roast():
     data = parse_with(RoastImportSchema())
     user = current_user()
 
-    if db.session.get(Bean, data["beanId"]) is None:
+    bean = db.session.get(Bean, data["beanId"])
+    if bean is None:
         raise ValidationFailed("豆子不存在", details={"beanId": data["beanId"]}, field="beanId")
+    ensure_owner(bean, user)
+    _require_green(bean)
 
     fmt = data["format"]
     text = ""
@@ -388,17 +458,24 @@ def import_roast():
         if drop:
             total_seconds = max(total_seconds, int(drop["atSecond"]))
 
+    bean = lock_bean_for_stock(data["beanId"])
+    ensure_owner(bean, user)
+    _require_green(bean)
+    green_grams = int(data.get("greenGrams") or 0)
+    out_grams = int(data.get("outGrams") or 0)
+    assert_roast_quantity(bean, green_grams, out_grams)
     roast = RoastBatch(
         id=new_id("rb"),
         user_id=user.id if user else None,
         bean_id=data["beanId"],
         batch_no=data.get("batchNo") or f"{utcnow():%Y-%m%d}-A",
         roaster=data.get("roaster"),
-        green_grams=int(data.get("greenGrams") or 0),
-        out_grams=int(data.get("outGrams") or 0),
+        green_grams=green_grams,
+        out_grams=out_grams,
         total_seconds=total_seconds,
         events=events,
-        roast_date=utcnow(),
+        roast_date=parse_datetime(data.get("roastDate"), name="roastDate") or utcnow(),
+        roast_level=data.get("roastLevel"),
     )
     _recompute(roast)
     _ensure_curve(
@@ -413,6 +490,7 @@ def import_roast():
 
     db.session.add(roast)
     db.session.commit()
+    cache.invalidate("stats")
 
     return ok(
         {

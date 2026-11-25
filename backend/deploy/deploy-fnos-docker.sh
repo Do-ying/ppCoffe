@@ -321,8 +321,15 @@ echo '❌ 等待超时'
 cd '$REMOTE_DIR' && docker compose ps && docker compose logs --tail=40 api
 exit 1"
 
-# 建表 + 演示数据
-ssh "$HOST" "cd '$REMOTE_DIR' && docker compose exec -T api python manage.py init-db && docker compose exec -T api python manage.py seed" || true
+# 建表 + 增量迁移 + 演示数据
+# ⚠️ migrate 必须在 init-db 之后、seed 之前：
+#    init-db 只建**新库**的表，migrate 才给**既有库**补新列（幂等，只增不删）。
+#    豆仓分类实施新增了 beans.kind / beans.purchase_cost_cents /
+#    roasts.roast_level 与 rest_events 表，靠这一步落到生产库。
+ssh "$HOST" "cd '$REMOTE_DIR' && \
+    docker compose exec -T api python manage.py init-db && \
+    docker compose exec -T api python manage.py migrate && \
+    docker compose exec -T api python manage.py seed" || true
 
 echo ""
 echo "✅ 部署完成"

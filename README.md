@@ -177,11 +177,9 @@ RoR（30s 中心窗口，对齐 Artisan）、DTR 发展比、脱水/梅纳/发�
    ```
 3. 重启构建。`src/services/http.ts` 的 `realTransport` 会接管，页面代码无需改动。
 
-> ⚠️ real 模式当前有两处前端侧未打通：
-> - **无登录流程** —— `http.ts` 已能读写 token（`ppcoffe.token`），但没有 `wx.login` → `POST /auth/wechat` 的接入，请求不会带 `Authorization`。
-> - **冲煮记录未落库** —— `api.createBrew` / `updateBrew` 目前零引用，详情页没有保存按钮。
->
-> 两处的修复方向见 [`docs/03-前端实现文档.md`](docs/03-前端实现文档.md) §12。
+真实模式下，冲煮预览页可以保存记录，详情页可以编辑风味备注和评鉴内容。更新已有数据库时先运行 `python manage.py migrate`。
+
+前端目前仍缺少 `wx.login` → `POST /auth/wechat` 的登录流程，`http.ts` 会在存在 `ppcoffe.token` 时附上访问令牌。
 
 ## 文档
 
@@ -194,12 +192,12 @@ RoR（30s 中心窗口，对齐 Artisan）、DTR 发展比、脱水/梅纳/发�
 | `docs/03-后端部署方案.md` | 后端架构、MySQL/Redis/MinIO 选型、阿里云 ECS 部署记录与踩坑 |
 | `docs/04-fnOS部署记录.md` | fnOS NAS 部署（无 Docker 备选方案：原生进程 + systemd user） |
 | `docs/05-fnOS部署记录-Docker版.md` | **fnOS NAS 部署（主方案）**：全栈 Docker 化、镜像策略、frp 配置 |
+| `docs/06-豆仓分类与批次管理实施计划.md` | 豆子分类、生豆库存、炉次关系、每克成本、封面和 Markdown |
 
 ## 当前进度
 
 - [x] **P0** 脚手架、设计令牌、双主题、路由、API 层、Mock 层、状态层
-- [x] **P1** 豆仓 CRUD + 冲煮记录（参数 / 器具 / 研磨度 / 风味 / 评鉴 / 图片）、风味诊断
-      —— ⚠️ **尾差**：冲煮详情页无保存按钮，`api.createBrew` 零引用，记录**尚无法落库**
+- [x] **P1** 豆仓 CRUD + 冲煮记录（参数 / 器具 / 研磨度 / 风味 / 评鉴 / 图片）、风味诊断及记录保存
 - [x] **P2** 冲煮曲线生成与绘制、曲线分析页、风味雷达与偏差可视化
       —— `keypoint` / `device` 两种来源算法已实现，缺页面入口
 - [x] **P4** 烘豆模块（事件打点合成曲线、BT/ET/RoR 三通道、叠加对比、.alog 解析）

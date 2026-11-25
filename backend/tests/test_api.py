@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict
 
 import pytest
@@ -136,6 +137,8 @@ def test_bean_crud(client):
             "weightGrams": 200,
             "remainingGrams": 120,
             "tags": ["花果香"],
+            "kind": "purchased_roasted",
+            "purchaseCostCents": 6000,
         },
     )
     assert status == 201
@@ -168,7 +171,17 @@ def test_bean_crud(client):
 
 def test_bean_cursor_pagination(client):
     for i in range(5):
-        call(client, "POST", "/api/v1/beans", {"name": f"豆子-{i}", "roastDate": "2026-11-10"})
+        call(
+            client,
+            "POST",
+            "/api/v1/beans",
+            {
+                "name": f"豆子-{i}",
+                "roastDate": "2026-11-10",
+                "kind": "purchased_roasted",
+                "weightGrams": 200,
+            },
+        )
 
     status, body = call(client, "GET", "/api/v1/beans?limit=2")
     assert status == 200
@@ -202,7 +215,12 @@ def bean_id(client):
         client,
         "POST",
         "/api/v1/beans",
-        {"name": "测试豆", "roastDate": "2026-11-10"},
+        {
+            "name": "测试豆",
+            "roastDate": "2026-11-10",
+            "kind": "purchased_roasted",
+            "weightGrams": 200,
+        },
     )
     return body["data"]["id"]
 
@@ -414,7 +432,16 @@ ALOG = """# Artisan Coffee Roaster 2.2.0
 """
 
 
-def test_roast_import_alog(client, bean_id):
+@pytest.fixture()
+def green_bean_id(client):
+    status, body = call(client, "POST", "/api/v1/beans", {
+        "name": "测试生豆", "kind": "green", "weightGrams": 1200,
+    })
+    assert status == 201
+    return body["data"]["id"]
+
+
+def test_roast_import_alog(client, green_bean_id):
     payload = base64.b64encode(ALOG.encode("utf-8")).decode("ascii")
     status, body = call(
         client,
@@ -422,7 +449,7 @@ def test_roast_import_alog(client, bean_id):
         "/api/v1/roasts/import",
         {
             "format": "artisan_alog",
-            "beanId": bean_id,
+            "beanId": green_bean_id,
             "payload": payload,
             "roaster": "Aillio Bullet R2",
             "greenGrams": 500,
@@ -443,13 +470,13 @@ def test_roast_import_alog(client, bean_id):
     assert "ror" in roast["curve"]["points"][0]
 
 
-def test_roast_append_event_updates_metrics(client, bean_id):
+def test_roast_append_event_updates_metrics(client, green_bean_id):
     status, body = call(
         client,
         "POST",
         "/api/v1/roasts",
         {
-            "beanId": bean_id,
+            "beanId": green_bean_id,
             "batchNo": "2026-1110-A",
             "greenGrams": 500,
             "outGrams": 425,
@@ -475,7 +502,7 @@ def test_roast_append_event_updates_metrics(client, bean_id):
     assert body["data"]["phaseRatio"]["drying"] == pytest.approx(46.9, abs=0.2)
 
 
-def test_roast_compare(client, bean_id):
+def test_roast_compare(client, green_bean_id):
     ids = []
     for no in ("A", "B"):
         _, body = call(
@@ -483,7 +510,7 @@ def test_roast_compare(client, bean_id):
             "POST",
             "/api/v1/roasts",
             {
-                "beanId": bean_id,
+                "beanId": green_bean_id,
                 "batchNo": f"2026-1110-{no}",
                 "greenGrams": 500,
                 "outGrams": 425,
@@ -676,6 +703,99 @@ def test_delete_upload(client):
     assert status == 200
 
 
+def test_presign_upload_purpose_bean(client):
+    """豆子封面走预签名直传：用途须放行 bean，且对象键以 bean/ 开头。"""
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/uploads/presign",
+        {
+            "filename": "bean/cover.jpg",
+            "contentType": "image/jpeg",
+            "sizeBytes": 2048,
+            "purpose": "bean",
+        },
+    )
+    assert status == 200
+    data = body["data"]
+    assert data["objectKey"].startswith("bean/")
+    assert data["objectKey"].endswith(".jpg")
+    assert data["headers"]["Content-Type"] == "image/jpeg"
+
+
+def test_presign_upload_rejects_unknown_purpose(client):
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/uploads/presign",
+        {"filename": "x.jpg", "purpose": "not-a-purpose"},
+    )
+    assert status == 422
+    assert body["error"]["code"] == "VALIDATION_FAILED"
+
+
+def test_presign_upload_registers_upload_record(client):
+    """预签名直传不经过 POST /uploads，须自行登记上传记录，
+    否则豆子封面键过不了 sourceFileKey 归属校验。"""
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/uploads/presign",
+        {"filename": "bean/cover.jpg", "contentType": "image/jpeg", "purpose": "bean"},
+    )
+    assert status == 200
+    object_key = body["data"]["objectKey"]
+
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/beans",
+        {
+            "name": "埃塞俄比亚 耶加雪菲",
+            "kind": "purchased_roasted",
+            "weightGrams": 200,
+            "sourceFileKey": object_key,
+        },
+    )
+    assert status == 201
+    assert body["data"]["sourceFileKey"] == object_key
+    assert body["data"]["imageUrl"]
+
+
+def test_bean_rejects_unregistered_source_file_key(client):
+    """未登记的对象键不能当封面用。"""
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/beans",
+        {
+            "name": "无主封面",
+            "kind": "purchased_roasted",
+            "weightGrams": 200,
+            "sourceFileKey": "bean/local/not-registered.jpg",
+        },
+    )
+    assert status == 422
+    assert body["error"]["code"] == "VALIDATION_FAILED"
+
+
+def test_upload_data_uri_purpose_bean(client):
+    """直传兜底入口同样尊重 purpose。"""
+    tiny = base64.b64encode(b"\xff\xd8\xff\xe0fakejpeg").decode("ascii")
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/uploads",
+        {
+            "filename": "bean/cover.jpg",
+            "dataUri": f"data:image/jpeg;base64,{tiny}",
+            "purpose": "bean",
+        },
+    )
+    assert status == 201
+    assert body["data"]["objectKey"].startswith("bean/")
+
+
 # --------------------------------------------------------------------- #
 #  认证
 # --------------------------------------------------------------------- #
@@ -791,7 +911,12 @@ def test_delete_bean_removes_it(app):
         client,
         "POST",
         "/api/v1/beans",
-        {"name": "待删除的豆子", "roastDate": "2026-11-10"},
+        {
+            "name": "待删除的豆子",
+            "roastDate": "2026-11-10",
+            "kind": "purchased_roasted",
+            "weightGrams": 200,
+        },
         headers=headers,
     )
     assert status == 201
@@ -803,3 +928,412 @@ def test_delete_bean_removes_it(app):
     status, body = call(client, "GET", "/api/v1/beans", headers=headers)
     assert status == 200
     assert all(b["id"] != bean_id for b in body["data"]["items"])
+
+
+# --------------------------------------------------------------------- #
+#  豆子分类 · 采购成本 · 生豆库存 · 养豆事件
+# --------------------------------------------------------------------- #
+
+
+def _auth(client):
+    """登录并返回带 token 的请求头。"""
+    _, body = call(client, "POST", "/api/v1/auth/wechat", {"code": "wx-new"})
+    return {"Authorization": f"Bearer {body['data']['token']}"}
+
+
+def _make_bean(client, headers, **overrides):
+    """建豆子（默认成品豆）。"""
+    payload = {
+        "name": "测试豆",
+        "kind": "purchased_roasted",
+        "weightGrams": 200,
+        "roastDate": "2026-11-10",
+    }
+    payload.update(overrides)
+    status, body = call(client, "POST", "/api/v1/beans", payload, headers=headers)
+    assert status == 201, body
+    return body["data"]
+
+
+def _make_roast(client, headers, bean_id, green=300, out=255, level="light"):
+    """建一炉烘焙（带完整事件，含下豆）。"""
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/roasts",
+        {
+            "beanId": bean_id,
+            "batchNo": "20261125-A",
+            "roaster": "R2",
+            "greenGrams": green,
+            "outGrams": out,
+            "totalSeconds": 512,
+            "roastLevel": level,
+            "events": [
+                {"type": "charge", "atSecond": 0, "temperature": 205},
+                {"type": "turningPoint", "atSecond": 78, "temperature": 108},
+                {"type": "dryEnd", "atSecond": 240, "temperature": 158},
+                {"type": "firstCrack", "atSecond": 348, "temperature": 201},
+                {"type": "drop", "atSecond": 512, "temperature": 216},
+            ],
+        },
+        headers=headers,
+    )
+    assert status == 201, body
+    return body["data"]
+
+
+def test_bean_requires_kind(client):
+    """新增豆子必须明确类型。"""
+    headers = _auth(client)
+    status, body = call(
+        client, "POST", "/api/v1/beans", {"name": "没类型的豆", "weightGrams": 200},
+        headers=headers,
+    )
+    assert status == 422
+    assert body["error"]["code"] == "VALIDATION_FAILED"
+
+
+def test_bean_cost_per_gram(client):
+    """每克成本 = 实付豆款 ÷ 购入克数。"""
+    headers = _auth(client)
+    # 200 克 60 元 → ¥0.3000/克
+    bean = _make_bean(client, headers, weightGrams=200, purchaseCostCents=6000)
+    assert bean["costPerGram"] == 0.3
+
+    # 1000 克 120 元 → ¥0.1200/克
+    bean = _make_bean(client, headers, weightGrams=1000, purchaseCostCents=12000)
+    assert bean["costPerGram"] == 0.12
+
+    # 豆款留空 → null（页面显示「未填写采购价」）
+    bean = _make_bean(client, headers, weightGrams=200)
+    assert bean["costPerGram"] is None
+
+    # 明确填 0 元 → 0.0
+    bean = _make_bean(client, headers, weightGrams=200, purchaseCostCents=0)
+    assert bean["costPerGram"] == 0.0
+
+
+def test_green_bean_stock_summary(client):
+    """生豆库存：已用/剩余按炉次汇总。"""
+    headers = _auth(client)
+    bean = _make_bean(
+        client, headers, kind="green", weightGrams=1000, purchaseCostCents=12000
+    )
+    assert bean["usedGreenGrams"] == 0
+    assert bean["remainingGrams"] == 1000
+
+    _make_roast(client, headers, bean["id"], green=300, out=255, level="light")
+    _make_roast(client, headers, bean["id"], green=250, out=205, level="medium")
+
+    status, body = call(client, "GET", f"/api/v1/beans/{bean['id']}", headers=headers)
+    assert status == 200
+    data = body["data"]
+    assert data["usedGreenGrams"] == 550
+    assert data["remainingGrams"] == 450
+    # 每克采购成本不随烘焙消耗改变
+    assert data["costPerGram"] == 0.12
+
+
+def test_roast_level_per_batch(client):
+    """每炉烘焙度独立保存。"""
+    headers = _auth(client)
+    bean = _make_bean(client, headers, kind="green", weightGrams=1000)
+    r1 = _make_roast(client, headers, bean["id"], green=300, level="light")
+    r2 = _make_roast(client, headers, bean["id"], green=250, out=205, level="medium")
+    assert r1["roastLevel"] == "light"
+    assert r2["roastLevel"] == "medium"
+    assert r1["completed"] is True
+
+
+def test_roast_type_retry_and_summary(client, bean_id, green_bean_id):
+    payload = {
+        "beanId": bean_id, "batchNo": "retry", "submissionId": "same-request",
+        "greenGrams": 300, "outGrams": 255, "roastLevel": "light",
+        "events": [{"type": "drop", "atSecond": 512, "temperature": 216}],
+    }
+    assert call(client, "POST", "/api/v1/roasts", payload)[0] == 422
+    assert call(client, "POST", "/api/v1/roasts/import", {
+        "beanId": bean_id, "format": "artisan_alog", "payload": ALOG,
+        "greenGrams": 300, "outGrams": 255,
+    })[0] == 422
+
+    payload["beanId"] = green_bean_id
+    status, first = call(client, "POST", "/api/v1/roasts", payload)
+    assert status == 201
+    assert call(client, "POST", "/api/v1/roasts", payload)[1]["data"]["id"] == first["data"]["id"]
+    status, bean = call(client, "GET", f"/api/v1/beans/{green_bean_id}")
+    assert status == 200
+    assert bean["data"]["remainingGrams"] == 900
+    assert call(client, "PATCH", f"/api/v1/beans/{green_bean_id}", {"weightGrams": 299})[0] == 409
+    status, summary = call(client, "GET", "/api/v1/stats/summary")
+    assert status == 200
+    assert any(row.get("roastBatchId") == first["data"]["id"] for row in summary["data"]["restingBeans"])
+
+
+def test_concurrent_roasts_cannot_exceed_stock(tmp_path):
+    app = create_app("testing", SQLALCHEMY_DATABASE_URI=f"sqlite:///{tmp_path / 'stock.sqlite'}")
+    with app.app_context():
+        _db.create_all()
+    bean = _make_bean(app.test_client(), {}, kind="green", weightGrams=450)
+
+    def save_roast(number):
+        return call(app.test_client(), "POST", "/api/v1/roasts", {
+            "beanId": bean["id"], "batchNo": str(number), "submissionId": str(number),
+            "greenGrams": 300, "outGrams": 255,
+            "events": [{"type": "drop", "atSecond": 512, "temperature": 216}],
+        })[0]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(save_roast, (1, 2))) == [201, 409]
+    _, result = call(app.test_client(), "GET", f"/api/v1/beans/{bean['id']}")
+    assert result["data"]["remainingGrams"] == 150
+
+
+def test_restore_bean_and_roast_metadata(client, green_bean_id):
+    assert call(client, "PATCH", f"/api/v1/beans/{green_bean_id}", {"purchaseCostCents": 12000})[0] == 200
+    roast = _make_roast(client, {}, green_bean_id)
+    status, event = call(client, "POST", f"/api/v1/beans/{green_bean_id}/rest-events", {
+        "type": "opened", "roastBatchId": roast["id"],
+    })
+    assert status == 201
+    status, exported = call(client, "GET", "/api/v1/export")
+    assert status == 200
+
+    restored_app = create_app("testing")
+    with restored_app.app_context():
+        _db.create_all()
+        target = restored_app.test_client()
+        status, result = call(target, "POST", "/api/v1/import", exported["data"])
+        assert status == 200, result
+        _, beans = call(target, "GET", f"/api/v1/beans/{green_bean_id}")
+        assert beans["data"]["purchaseCostCents"] == 12000
+        _, roasts = call(target, "GET", f"/api/v1/roasts/{roast['id']}")
+        assert roasts["data"]["roastLevel"] == "light"
+        assert roasts["data"]["roastDate"] == roast["roastDate"]
+        assert roasts["data"]["curve"]["points"] == roast["curve"]["points"]
+        _, events = call(target, "GET", f"/api/v1/beans/{green_bean_id}/rest-events")
+        assert events["data"]["items"][0]["id"] == event["data"]["id"]
+
+
+def test_roast_quantity_validation(client):
+    """出豆克数须 ≤ 投豆克数且大于零。"""
+    headers = _auth(client)
+    bean = _make_bean(client, headers, kind="green", weightGrams=1000)
+
+    # 出豆 > 投豆
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/roasts",
+        {
+            "beanId": bean["id"],
+            "batchNo": "bad-1",
+            "greenGrams": 100,
+            "outGrams": 200,
+            "events": [{"type": "drop", "atSecond": 100, "temperature": 200}],
+        },
+        headers=headers,
+    )
+    assert status == 422
+
+    # 投豆为 0
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/roasts",
+        {
+            "beanId": bean["id"],
+            "batchNo": "bad-2",
+            "greenGrams": 0,
+            "outGrams": 0,
+            "events": [{"type": "drop", "atSecond": 100, "temperature": 200}],
+        },
+        headers=headers,
+    )
+    assert status == 422
+
+
+def test_roast_exceeds_purchased_grams(client):
+    """累计投豆不得超过购入克数。"""
+    headers = _auth(client)
+    bean = _make_bean(client, headers, kind="green", weightGrams=400)
+    _make_roast(client, headers, bean["id"], green=300, out=255)
+
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/roasts",
+        {
+            "beanId": bean["id"],
+            "batchNo": "over-1",
+            "greenGrams": 300,
+            "outGrams": 255,
+            "events": [{"type": "drop", "atSecond": 100, "temperature": 200}],
+        },
+        headers=headers,
+    )
+    assert status == 409
+    assert body["error"]["code"] == "CONFLICT"
+
+
+def test_brew_requires_roast_batch_for_green_bean(client):
+    """生豆冲煮必须选炉；漏选或选错豆子的炉次都要被拒。"""
+    headers = _auth(client)
+    bean = _make_bean(client, headers, kind="green", weightGrams=1000)
+    roast = _make_roast(client, headers, bean["id"], green=300, out=255)
+
+    # 漏选炉次
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/brews",
+        {"beanId": bean["id"], "method": "pour_over_v60",
+         "params": {"doseGrams": 15, "waterGrams": 250, "brewSeconds": 150}},
+        headers=headers,
+    )
+    assert status == 422
+    assert body["error"]["field"] == "roastBatchId"
+
+    # 选了别的豆子的炉次
+    other = _make_bean(client, headers, kind="green", weightGrams=1000)
+    other_roast = _make_roast(client, headers, other["id"], green=300, out=255)
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/brews",
+        {"beanId": bean["id"], "roastBatchId": other_roast["id"],
+         "method": "pour_over_v60",
+         "params": {"doseGrams": 15, "waterGrams": 250, "brewSeconds": 150}},
+        headers=headers,
+    )
+    assert status == 422
+
+    # 正确关联 → 通过
+    status, body = call(
+        client,
+        "POST",
+        "/api/v1/brews",
+        {"beanId": bean["id"], "roastBatchId": roast["id"],
+         "method": "pour_over_v60",
+         "params": {"doseGrams": 15, "waterGrams": 250, "brewSeconds": 150}},
+        headers=headers,
+    )
+    assert status == 201
+    assert body["data"]["roastBatchId"] == roast["id"]
+
+
+def test_bean_kind_locked_when_has_records(client):
+    """已有业务记录时不能改类型。"""
+    headers = _auth(client)
+    bean = _make_bean(client, headers, kind="green", weightGrams=1000)
+    _make_roast(client, headers, bean["id"], green=300, out=255)
+
+    status, body = call(
+        client, "PATCH", f"/api/v1/beans/{bean['id']}", {"kind": "purchased_roasted"},
+        headers=headers,
+    )
+    assert status == 409
+
+
+def test_rest_events_crud(client):
+    """养豆事件：生豆挂炉次，成品豆挂购入批次。"""
+    headers = _auth(client)
+
+    # 成品豆：事件挂在购入批次上
+    purchased = _make_bean(client, headers, kind="purchased_roasted", weightGrams=200)
+    status, body = call(
+        client,
+        "POST",
+        f"/api/v1/beans/{purchased['id']}/rest-events",
+        {"type": "opened", "occurredAt": "2026-11-11T00:00:00Z", "note": "开袋"},
+        headers=headers,
+    )
+    assert status == 201
+    event_id = body["data"]["id"]
+    assert body["data"]["type"] == "opened"
+    assert body["data"]["roastBatchId"] is None
+
+    status, body = call(
+        client, "GET", f"/api/v1/beans/{purchased['id']}/rest-events", headers=headers
+    )
+    assert status == 200
+    assert len(body["data"]["items"]) == 1
+
+    # 更正
+    status, body = call(
+        client,
+        "PATCH",
+        f"/api/v1/beans/{purchased['id']}/rest-events/{event_id}",
+        {"note": "开袋并密封"},
+        headers=headers,
+    )
+    assert status == 200
+    assert body["data"]["note"] == "开袋并密封"
+
+    # 删除
+    status, body = call(
+        client, "DELETE", f"/api/v1/beans/{purchased['id']}/rest-events/{event_id}",
+        headers=headers,
+    )
+    assert status == 200
+    status, body = call(
+        client, "GET", f"/api/v1/beans/{purchased['id']}/rest-events", headers=headers
+    )
+    assert len(body["data"]["items"]) == 0
+
+
+def test_rest_event_for_green_requires_roast_batch(client):
+    """生豆的养豆事件必须指定炉次。"""
+    headers = _auth(client)
+    bean = _make_bean(client, headers, kind="green", weightGrams=1000)
+
+    # 漏选炉次 → 拒绝
+    status, body = call(
+        client,
+        "POST",
+        f"/api/v1/beans/{bean['id']}/rest-events",
+        {"type": "sealed"},
+        headers=headers,
+    )
+    assert status == 422
+
+    # 指定已完成的炉次 → 通过
+    roast = _make_roast(client, headers, bean["id"], green=300, out=255)
+    status, body = call(
+        client,
+        "POST",
+        f"/api/v1/beans/{bean['id']}/rest-events",
+        {"type": "sealed", "roastBatchId": roast["id"]},
+        headers=headers,
+    )
+    assert status == 201
+    assert body["data"]["roastBatchId"] == roast["id"]
+
+
+def test_rest_stage_in_bean_payload(client):
+    """豆子响应里带养豆阶段（按自然日口径）。"""
+    from datetime import date, timedelta
+
+    headers = _auth(client)
+
+    # 30 天前 → 风味衰减
+    old_date = (date.today() - timedelta(days=30)).isoformat()
+    bean = _make_bean(client, headers, roastDate=old_date)
+    assert bean["restStage"]["stage"] == "fading"
+    assert bean["restStage"]["label"] == "风味衰减"
+
+    # 3 天前 → 养豆期
+    recent = (date.today() - timedelta(days=3)).isoformat()
+    bean = _make_bean(client, headers, roastDate=recent)
+    assert bean["restStage"]["stage"] == "resting"
+
+    # 14 天前 → 赏味期
+    peak = (date.today() - timedelta(days=14)).isoformat()
+    bean = _make_bean(client, headers, roastDate=peak)
+    assert bean["restStage"]["stage"] == "peak"
+
+    # 烘焙日期未知 → unknown
+    bean = _make_bean(client, headers, roastDate=None)
+    assert bean["restStage"]["stage"] == "unknown"
+    assert bean["restStage"]["label"] == "烘焙日期未知"

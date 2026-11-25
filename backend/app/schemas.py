@@ -27,6 +27,8 @@ __all__ = [
     "RoastCurvePointSchema",
     "RoastCreateSchema",
     "RoastUpdateSchema",
+    "RestEventCreateSchema",
+    "RestEventUpdateSchema",
     "EquipmentCreateSchema",
     "EquipmentUpdateSchema",
     "RecipeCreateSchema",
@@ -197,6 +199,15 @@ class BeanCreateSchema(BaseSchema):
     tags = fields.List(fields.String(), required=False)
     imageUrl = fields.String(required=False, allow_none=True)
     notes = fields.String(required=False, allow_none=True)
+    #: 豆子类型：purchased_roasted 成品豆 / green 生豆
+    kind = fields.String(
+        required=False, allow_none=True,
+        validate=validate.OneOf(["purchased_roasted", "green"]),
+    )
+    #: 实付豆款，单位「分」；None 表示未填写采购价，0 表示明确填了 0 元
+    purchaseCostCents = fields.Integer(required=False, allow_none=True, validate=validate.Range(min=0, max=2147483647))
+    #: 封面图对象键（对象存储）
+    sourceFileKey = fields.String(required=False, allow_none=True)
 
 
 class BeanUpdateSchema(BaseSchema):
@@ -216,6 +227,12 @@ class BeanUpdateSchema(BaseSchema):
     tags = fields.List(fields.String(), required=False)
     imageUrl = fields.String(required=False, allow_none=True)
     notes = fields.String(required=False, allow_none=True)
+    kind = fields.String(
+        required=False, allow_none=True,
+        validate=validate.OneOf(["purchased_roasted", "green"]),
+    )
+    purchaseCostCents = fields.Integer(required=False, allow_none=True, validate=validate.Range(min=0, max=2147483647))
+    sourceFileKey = fields.String(required=False, allow_none=True)
 
 
 # --------------------------------------------------------------------- #
@@ -242,6 +259,7 @@ class RoastCurvePointSchema(BaseSchema):
 class RoastCreateSchema(BaseSchema):
     beanId = fields.String(required=True)
     batchNo = fields.String(required=True)
+    submissionId = fields.String(validate=validate.Length(min=1, max=64))
     roaster = fields.String(required=False, allow_none=True)
     greenGrams = fields.Integer(required=False, validate=validate.Range(min=0))
     outGrams = fields.Integer(required=False, validate=validate.Range(min=0))
@@ -249,9 +267,41 @@ class RoastCreateSchema(BaseSchema):
     events = fields.List(fields.Nested(RoastEventSchema), required=False)
     curve = fields.List(fields.Nested(RoastCurvePointSchema), required=False)
     cuppingScore = fields.Float(required=False, validate=validate.Range(min=0, max=100))
+    roastLevel = fields.String(
+        required=False, allow_none=True,
+        validate=validate.OneOf(["light", "medium", "medium_dark", "dark"]),
+    )
     notes = fields.String(required=False, allow_none=True)
     roastDate = fields.String(required=False, allow_none=True)
     targetProfileId = fields.String(required=False, allow_none=True)
+
+
+class RestEventCreateSchema(BaseSchema):
+    """养豆事件录入。
+
+    ``beanId`` 从 URL 路径取，不在请求体里重复传。
+
+    ``roastBatchId``：生豆（kind=green）必填 —— 事件挂在具体炉次上；
+    成品豆（kind=purchased_roasted）留空 —— 事件挂在购入批次上。
+    """
+
+    roastBatchId = fields.String(required=False, allow_none=True)
+    type = fields.String(
+        required=True, validate=validate.OneOf(["opened", "sealed", "divided", "note"])
+    )
+    occurredAt = fields.String(required=False, allow_none=True)
+    note = fields.String(required=False, allow_none=True)
+
+
+class RestEventUpdateSchema(BaseSchema):
+    """养豆事件更正。"""
+
+    roastBatchId = fields.String(required=False, allow_none=True)
+    type = fields.String(
+        required=False, validate=validate.OneOf(["opened", "sealed", "divided", "note"])
+    )
+    occurredAt = fields.String(required=False, allow_none=True)
+    note = fields.String(required=False, allow_none=True)
 
 
 class RoastUpdateSchema(BaseSchema):
@@ -264,6 +314,10 @@ class RoastUpdateSchema(BaseSchema):
     events = fields.List(fields.Nested(RoastEventSchema), required=False)
     curve = fields.List(fields.Nested(RoastCurvePointSchema), required=False)
     cuppingScore = fields.Float(required=False, validate=validate.Range(min=0, max=100))
+    roastLevel = fields.String(
+        required=False, allow_none=True,
+        validate=validate.OneOf(["light", "medium", "medium_dark", "dark"]),
+    )
     notes = fields.String(required=False, allow_none=True)
     roastDate = fields.String(required=False, allow_none=True)
     targetProfileId = fields.String(required=False, allow_none=True)
@@ -337,7 +391,8 @@ class PresignSchema(BaseSchema):
     filename = fields.String(required=True)
     contentType = fields.String(required=False, allow_none=True)
     sizeBytes = fields.Integer(required=False, allow_none=True)
-    purpose = fields.String(required=False, validate=validate.OneOf(["brew", "roast"]))
+    #: 用途前缀：brew（冲煮附图）/ roast（烘焙记录）/ bean（豆子封面）
+    purpose = fields.String(required=False, validate=validate.OneOf(["brew", "roast", "bean"]))
 
 
 class UploadCreateSchema(BaseSchema):
@@ -346,6 +401,8 @@ class UploadCreateSchema(BaseSchema):
     sizeBytes = fields.Integer(required=False, allow_none=True)
     contentType = fields.String(required=False, allow_none=True)
     caption = fields.String(required=False, allow_none=True)
+    #: 用途前缀：brew（冲煮附图）/ bean（豆子封面）
+    purpose = fields.String(required=False, allow_none=True)
 
 
 class KeypointSchema(BaseSchema):
@@ -381,3 +438,5 @@ class RoastImportSchema(BaseSchema):
     roaster = fields.String(required=False, allow_none=True)
     greenGrams = fields.Integer(required=False, allow_none=True)
     outGrams = fields.Integer(required=False, allow_none=True)
+    roastLevel = fields.String(validate=validate.OneOf(["light", "medium", "medium_dark", "dark"]))
+    roastDate = fields.String()

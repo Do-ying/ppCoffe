@@ -21,6 +21,7 @@ export async function pickImages(count = 9): Promise<PickedImage[]> {
       input.type = 'file'
       input.accept = 'image/*'
       input.multiple = count > 1
+      input.oncancel = () => resolve([])
       input.onchange = () => {
         const files = Array.from(input.files || []).slice(0, count)
         resolve(
@@ -60,7 +61,8 @@ export async function readImageAsDataUri(path: string): Promise<string> {
     filePath: path,
     encoding: 'base64'
   })) as unknown as { data: string }
-  return `data:image/jpeg;base64,${res.data}`
+  const format = guessExtension(path)
+  return `data:image/${format === 'jpg' ? 'jpeg' : format};base64,${res.data}`
 }
 
 /** 猜测扩展名 */

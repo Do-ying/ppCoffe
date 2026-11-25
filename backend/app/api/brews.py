@@ -29,6 +29,7 @@ from ..models.mixins import utcnow
 from ..models.roast import RoastBatch
 from ..schemas import BrewCreateSchema, BrewUpdateSchema, CompareBrewsSchema, DeriveCurveSchema
 from ..security import current_user, ensure_owner
+from ..services.validation import lock_bean_for_stock
 from .helpers import (
     page_size,
     paginate,
@@ -114,6 +115,54 @@ def _sync_curve(brew: BrewRecord, curve_data: Dict[str, Any]) -> None:
     brew.curve.meta = curve_data.get("meta") or {}
 
 
+def _validate_roast_link(bean: Bean, roast: RoastBatch, brew_date: Any) -> None:
+    """校验冲煮与炉次的关联（计划书第二节）。
+
+    - 炉次须属于所选豆子
+    - 炉次须已完成（有有效下豆时间与投豆量）
+    - 生豆冲煮时间须在所选炉次下豆之后或同一时刻
+    """
+    if roast.bean_id != bean.id:
+        raise ValidationFailed(
+            "烘焙批次不属于所选豆子",
+            details={"beanId": bean.id, "roastBatchId": roast.id},
+            field="roastBatchId",
+        )
+    if not roast.is_completed():
+        raise ValidationFailed(
+            "该烘焙炉次尚未完成，不能用于冲煮",
+            details={"roastBatchId": roast.id},
+            field="roastBatchId",
+        )
+
+    if roast.roast_date and brew_date < roast.roast_date:
+        raise ValidationFailed(
+            "冲煮时间早于所选炉次的下豆时间",
+            details={"roastBatchId": roast.id},
+            field="brewDate",
+        )
+
+
+def validate_brew_source(bean_id: str, roast_batch_id: str | None, brew_date: Any) -> None:
+    """校验新建或调整后的冲煮来源。"""
+    bean = lock_bean_for_stock(bean_id)
+    user = current_user()
+    ensure_owner(bean, user)
+    if not bean.kind:
+        raise ValidationFailed("请先确认豆子类型", field="beanId")
+    if bean.kind != "green":
+        if roast_batch_id:
+            raise ValidationFailed("成品豆冲煮无需关联炉次", field="roastBatchId")
+        return
+    if not roast_batch_id:
+        raise ValidationFailed("生豆冲煮需选择烘焙炉次", field="roastBatchId")
+    roast = db.session.get(RoastBatch, roast_batch_id, with_for_update=True, populate_existing=True)
+    if roast is None:
+        raise ValidationFailed("烘焙批次不存在", field="roastBatchId")
+    ensure_owner(roast, user)
+    _validate_roast_link(bean, roast, brew_date)
+
+
 # --------------------------------------------------------------------- #
 #  列表 / 创建
 # --------------------------------------------------------------------- #
@@ -158,9 +207,8 @@ def create_brew():
     data = parse_with(BrewCreateSchema())
     user = current_user()
 
-    bean = db.session.get(Bean, data["beanId"])
-    if bean is None:
-        raise ValidationFailed("豆子不存在", details={"beanId": data["beanId"]}, field="beanId")
+    brew_date = parse_datetime(data.get("brewDate"), name="brewDate") or utcnow()
+    validate_brew_source(data["beanId"], data.get("roastBatchId"), brew_date)
 
     method = find_method(data["method"])
     if method is None:
@@ -169,13 +217,6 @@ def create_brew():
             details={"method": data["method"]},
             field="method",
         )
-
-    if data.get("roastBatchId"):
-        roast = db.session.get(RoastBatch, data["roastBatchId"])
-        if roast is None:
-            raise ValidationFailed(
-                "烘焙批次不存在", details={"roastBatchId": data["roastBatchId"]}, field="roastBatchId"
-            )
 
     params = dict(data.get("params") or {})
     # 粉水比由粉量/注水量派生
@@ -200,7 +241,7 @@ def create_brew():
         notes=data.get("notes"),
         review=data.get("review"),
         images=data.get("images"),
-        brew_date=parse_datetime(data.get("brewDate"), name="brewDate") or utcnow(),
+        brew_date=brew_date,
     )
     db.session.add(brew)
     db.session.flush()
@@ -239,12 +280,13 @@ def update_brew(brew_id: str):
     brew = _get_brew(brew_id)
     data = parse_with(BrewUpdateSchema(), partial=True)
 
-    if "beanId" in data:
-        if db.session.get(Bean, data["beanId"]) is None:
-            raise ValidationFailed("豆子不存在", details={"beanId": data["beanId"]}, field="beanId")
-        brew.bean_id = data["beanId"]
-    if "roastBatchId" in data:
-        brew.roast_batch_id = data.get("roastBatchId")
+    brew_date = parse_datetime(data.get("brewDate"), name="brewDate") or brew.brew_date
+    if {"beanId", "roastBatchId"} & data.keys() or ("brewDate" in data and brew.roast_batch_id):
+        bean_id = data.get("beanId", brew.bean_id)
+        roast_batch_id = data.get("roastBatchId", brew.roast_batch_id) or None
+        validate_brew_source(bean_id, roast_batch_id, brew_date)
+        brew.bean_id = bean_id
+        brew.roast_batch_id = roast_batch_id
     if "method" in data:
         if find_method(data["method"]) is None:
             raise ValidationFailed("未知的冲煮方式", field="method")
@@ -269,7 +311,7 @@ def update_brew(brew_id: str):
     if "images" in data:
         brew.images = data.get("images")
     if "brewDate" in data:
-        brew.brew_date = parse_datetime(data.get("brewDate"), name="brewDate") or brew.brew_date
+        brew.brew_date = brew_date
     if "curve" in data:
         _sync_curve(brew, data["curve"] or {})
 

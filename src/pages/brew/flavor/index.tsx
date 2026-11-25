@@ -17,6 +17,7 @@ import {
 import { diagnose, describeDeviation } from '../../../domain/diagnosis'
 import { useBrewDraft } from '../../../store/useBrewDraft'
 import FlavorRadar from '../../../components/chart/FlavorRadar'
+import Markdown from '../../../components/markdown'
 import { pickImages } from '../../../platform/image'
 import { uploadBrewImage } from '../../../services/uploads'
 
@@ -115,7 +116,7 @@ export default function FlavorPage() {
   const activeDefectIds = new Set(draft.defects.map(d => d.id))
 
   return (
-    <View className="page">
+    <View className={`page ${themeClass}`}>
       <View className="page__header">
         <Text className="eyebrow">FLAVOR LOG</Text>
         <Text className="page__title">风味记录</Text>
@@ -247,15 +248,24 @@ export default function FlavorPage() {
           </View>
         )}
 
-        {/* 备注 */}
+        {/* 风味备注 */}
         <View className="block">
           <Text className="section-title">风味备注</Text>
+          <Text className="mute block__hint">
+            支持 Markdown：标题、粗体、斜体、列表、引用
+          </Text>
           <Textarea
             className="note"
             value={draft.note}
             placeholder="例如：前段有明显柑橘酸，尾段发苦，余韵偏短"
             onInput={e => setNote(e.detail.value)}
           />
+          {!!draft.note.trim() && (
+            <View className="note-preview">
+              <Text className="mute note-preview__label">预览</Text>
+              <Markdown source={draft.note} compact />
+            </View>
+          )}
         </View>
 
         {/* 评鉴内容 */}
@@ -270,6 +280,12 @@ export default function FlavorPage() {
             placeholder="例如：这杯整体偏薄，缺少甜感支撑；下次把研磨调细半格、水温提到 94℃，闷蒸延长到 50 秒，看看酸甜能否平衡。"
             onInput={e => setReview(e.detail.value)}
           />
+          {!!draft.review.trim() && (
+            <View className="note-preview">
+              <Text className="mute note-preview__label">预览</Text>
+              <Markdown source={draft.review} compact />
+            </View>
+          )}
         </View>
 
         {/* 图片备注 */}

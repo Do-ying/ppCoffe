@@ -1,6 +1,7 @@
 """命令行工具。
 
     python manage.py init-db       # 建表
+    python manage.py migrate       # 增量迁移（给既有库补新列 / 新表）
     python manage.py seed          # 灌入演示数据
     python manage.py run           # 本地起服务
     python manage.py export-openapi  # 导出 OpenAPI 3.1 文档
@@ -37,6 +38,13 @@ def cmd_seed() -> None:
         print(f"✅ 演示数据已写入：{result}")
 
 
+def cmd_migrate() -> None:
+    """增量迁移：给既有库补新表 / 新列。"""
+    from app.services.migrations import migrate
+
+    migrate()
+
+
 def cmd_run() -> None:
     app = create_app()
     host = os.getenv("HOST", "127.0.0.1")
@@ -60,6 +68,7 @@ def cmd_export_openapi() -> None:
 
 COMMANDS = {
     "init-db": cmd_init_db,
+    "migrate": cmd_migrate,
     "seed": cmd_seed,
     "run": cmd_run,
     "export-openapi": cmd_export_openapi,

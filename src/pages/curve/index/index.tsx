@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { View, Text, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../services'
 import { BREW_METHODS } from '../../../domain/methods'
 import { curveStats } from '../../../domain/curve/generate'
 import { roastCurveStats } from '../../../domain/curve/roast'
-import { ROAST_EVENT_LABELS } from '../../../domain/types'
+import { ROAST_EVENT_LABELS, ROAST_LEVEL_LABELS } from '../../../domain/types'
 import CurveChart from '../../../components/chart/CurveChart'
 import RoastCurveChart from '../../../components/chart/RoastCurveChart'
 import { useResolvedTheme } from '../../../store/useTheme'
@@ -16,28 +16,35 @@ import './index.scss'
 export default function CurvePage() {
   const { themeClass } = useResolvedTheme()
   const router = Taro.useRouter()
+  const queryClient = useQueryClient()
   const beanId = router.params.beanId as string | undefined
   const roastId = router.params.roastId as string | undefined
   const [tab, setTab] = useState<'brew' | 'roast'>(roastId ? 'roast' : 'brew')
+  const [selectedBrewId, setSelectedBrewId] = useState('')
+  const [selectedRoastId, setSelectedRoastId] = useState(roastId ?? '')
 
-  const { data: brews } = useQuery({ queryKey: ['brews'], queryFn: () => api.listBrews() })
+  const { data: brews } = useQuery({
+    queryKey: beanId ? ['beanBrews', beanId] : ['brews'],
+    queryFn: () => beanId ? api.beanBrews(beanId) : api.listBrews()
+  })
   const { data: beans } = useQuery({ queryKey: ['beans'], queryFn: api.listBeans })
-  const { data: roasts } = useQuery({ queryKey: ['roasts'], queryFn: api.listRoasts })
+  const { data: bean } = useQuery({
+    queryKey: ['bean', beanId], queryFn: () => api.getBean(beanId as string), enabled: !!beanId
+  })
+  const { data: roasts } = useQuery({
+    queryKey: beanId ? ['beanRoasts', beanId] : ['roasts'],
+    queryFn: () => beanId ? api.beanRoasts(beanId) : api.listRoasts()
+  })
 
   /** 曲线始终归属到具体豆子：从豆子详情进入时只看这一支豆 */
   const brewList = useMemo(
-    () => (brews?.items ?? []).filter(b => !beanId || b.beanId === beanId),
-    [brews, beanId]
+    () => (brews?.items ?? []).filter(b => !roastId || b.roastBatchId === selectedRoastId),
+    [brews, roastId, selectedRoastId]
   )
   const roastList = useMemo(
     () => (roasts?.items ?? []).filter(r => !beanId || r.beanId === beanId),
     [roasts, beanId]
   )
-
-  const [selectedBrewId, setSelectedBrewId] = useState<string>('')
-  const [selectedRoastId, setSelectedRoastId] = useState<string>(roastId || '')
-
-  const bean = beanId ? beans?.items.find(b => b.id === beanId) : undefined
 
   const selected = useMemo(
     () => brewList.find(b => b.id === selectedBrewId) ?? brewList[0],
@@ -71,6 +78,27 @@ export default function CurvePage() {
 
   const brewStats = selected ? curveStats(selected.curve) : null
   const roastStats = roastCurveStats(selectedRoast?.curve?.points ?? [])
+  const removeRoast = async () => {
+    if (!selectedRoast) return
+    const { confirm } = await Taro.showModal({
+      title: '删除烘焙批次',
+      content: `删除「${selectedRoast.batchNo}」后，账面生豆将恢复 ${selectedRoast.completed ? selectedRoast.greenGrams : 0} 克。`,
+      confirmText: '删除'
+    })
+    if (!confirm) return
+    try {
+      await api.deleteRoast(selectedRoast.id)
+      setSelectedRoastId('')
+      void queryClient.invalidateQueries({ queryKey: ['bean', beanId] })
+      void queryClient.invalidateQueries({ queryKey: ['beanRoasts', beanId] })
+      void queryClient.invalidateQueries({ queryKey: ['roasts'] })
+      void queryClient.invalidateQueries({ queryKey: ['beans'] })
+      void queryClient.invalidateQueries({ queryKey: ['summary'] })
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (error: unknown) {
+      Taro.showToast({ title: error instanceof Error ? error.message : '删除失败', icon: 'none' })
+    }
+  }
 
   return (
     <View className={`page ${themeClass}`}>
@@ -91,7 +119,7 @@ export default function CurvePage() {
             className={tab === 'brew' ? 'segmented__item segmented__item--active' : 'segmented__item'}
             onClick={() => setTab('brew')}
           >
-            <Text className="segmented__label">冲煮曲线</Text>
+            <Text className="segmented__label">{roastId ? '本炉冲煮' : '冲煮曲线'}</Text>
           </View>
           <View
             className={tab === 'roast' ? 'segmented__item segmented__item--active' : 'segmented__item'}
@@ -187,6 +215,7 @@ export default function CurvePage() {
             <Text className="dim list-sub">
               {beans?.items.find(b => b.id === selectedRoast.beanId)?.name ?? '未知豆子'} ·{' '}
               {selectedRoast.batchNo} · {selectedRoast.roaster}
+              {selectedRoast.roastLevel && ` · ${ROAST_LEVEL_LABELS[selectedRoast.roastLevel]}`}
             </Text>
 
             <ScrollView className="filters" scrollX>
@@ -198,10 +227,30 @@ export default function CurvePage() {
                   }
                   onClick={() => setSelectedRoastId(r.id)}
                 >
-                  {r.batchNo}
+                  {r.batchNo}{r.roastLevel && ` · ${ROAST_LEVEL_LABELS[r.roastLevel]}`}
                 </View>
               ))}
             </ScrollView>
+
+            {selectedRoast.completed && bean?.kind === 'green' && (
+              <View className="actions">
+                <View className="btn btn--ghost" onClick={() => Taro.navigateTo({
+                  url: `/pages/brew/bean/index?beanId=${beanId}&roastBatchId=${selectedRoast.id}`
+                })}>用这炉冲煮</View>
+                <View className="btn btn--ghost" onClick={() => Taro.navigateTo({
+                  url: `/pages/bean/rest/index?beanId=${beanId}&roastBatchId=${selectedRoast.id}`
+                })}>养豆事件</View>
+              </View>
+            )}
+
+            {bean?.kind === 'green' && (
+              <View className="actions">
+                <View className="btn btn--ghost" onClick={() => Taro.navigateTo({
+                  url: `/pages/roast/edit/index?beanId=${beanId}&id=${selectedRoast.id}`
+                })}>更正炉次</View>
+                <View className="btn btn--ghost" onClick={removeRoast}>删除炉次</View>
+              </View>
+            )}
 
             <View className="chart-box">
               <RoastCurveChart

@@ -8,7 +8,19 @@ from flask import Flask, current_app
 
 from ..envelope import ok
 from ..extensions import db
-from . import auth_api, beans, brews, data, equipment, metadata, recipes, roasts, stats, uploads
+from . import (
+    auth_api,
+    beans,
+    brews,
+    data,
+    equipment,
+    metadata,
+    recipes,
+    rest_events,
+    roasts,
+    stats,
+    uploads,
+)
 
 __all__ = ["register_blueprints"]
 
@@ -20,6 +32,8 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(auth_api.bp, url_prefix=f"{prefix}/auth")
     app.register_blueprint(metadata.bp, url_prefix=prefix)
     app.register_blueprint(beans.bp, url_prefix=f"{prefix}/beans")
+    # 养豆事件是豆子下的子资源：/beans/{beanId}/rest-events
+    app.register_blueprint(rest_events.bp, url_prefix=f"{prefix}/beans")
     app.register_blueprint(brews.bp, url_prefix=f"{prefix}/brews")
     app.register_blueprint(roasts.bp, url_prefix=f"{prefix}/roasts")
     app.register_blueprint(recipes.bp, url_prefix=f"{prefix}/recipes")

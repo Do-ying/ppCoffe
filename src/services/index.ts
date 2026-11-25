@@ -5,6 +5,8 @@ import type {
   BrewRecord,
   Equipment,
   FlavorDefect,
+  RestEvent,
+  RestEventType,
   RoastBatch,
   RoastBatchPayload
 } from '../domain/types'
@@ -44,6 +46,8 @@ export interface FlavorWheel {
 
 export interface SummaryBean {
   beanId: string
+  roastBatchId?: string
+  batchNo?: string
   name: string
   roastDate: string
   daysSinceRoast: number
@@ -97,6 +101,31 @@ export const api = {
   beanBrews: (id: string) => client.get<BrewList>(`/beans/${id}/brews`),
   beanRoasts: (id: string) => client.get<RoastList>(`/beans/${id}/roasts`),
 
+  /* 养豆事件 */
+  listRestEvents: (beanId: string) =>
+    client.get<{ items: RestEvent[] }>(`/beans/${beanId}/rest-events`),
+  createRestEvent: (
+    beanId: string,
+    data: {
+      type: RestEventType
+      roastBatchId?: string
+      occurredAt?: string
+      note?: string
+    }
+  ) => client.post<RestEvent>(`/beans/${beanId}/rest-events`, data),
+  updateRestEvent: (
+    beanId: string,
+    eventId: string,
+    data: {
+      type?: RestEventType
+      roastBatchId?: string | null
+      occurredAt?: string
+      note?: string
+    }
+  ) => client.patch<RestEvent>(`/beans/${beanId}/rest-events/${eventId}`, data),
+  deleteRestEvent: (beanId: string, eventId: string) =>
+    client.del<{ ok: boolean }>(`/beans/${beanId}/rest-events/${eventId}`),
+
   /* 冲煮 */
   listBrews: (params?: { method?: string; beanId?: string; from?: string; to?: string }) =>
     client.get<BrewList>('/brews', params),
@@ -114,8 +143,11 @@ export const api = {
   /* 烘豆 */
   listRoasts: () => client.get<RoastList>('/roasts'),
   getRoast: (id: string) => client.get<RoastBatch>(`/roasts/${id}`),
+  deleteRoast: (id: string) => client.del<{ ok: boolean }>(`/roasts/${id}`),
   // 请求体的 curve 是采样点数组（与读取时的对象形态不同）—— 见 RoastBatchPayload
   createRoast: (data: RoastBatchPayload) => client.post<RoastBatch>('/roasts', data),
+  updateRoast: (id: string, data: Partial<RoastBatchPayload>) =>
+    client.patch<RoastBatch>(`/roasts/${id}`, data),
 
   /* 器具 */
   listEquipment: () => client.get<EquipmentList>('/equipment'),
@@ -125,10 +157,19 @@ export const api = {
   deleteEquipment: (id: string) => client.del<{ ok: boolean }>(`/equipment/${id}`),
 
   /* 图片上传（存储由后端决定，前端只认返回的 url / objectKey） */
-  presignUpload: (data: { filename: string; contentType?: string; sizeBytes?: number }) =>
-    client.post<UploadTarget>('/uploads/presign', data),
-  createUpload: (data: { filename: string; dataUri?: string; sizeBytes?: number }) =>
-    client.post<BrewImage>('/uploads', data),
+  presignUpload: (data: {
+    filename: string
+    contentType?: string
+    sizeBytes?: number
+    /** 用途前缀：brew / bean，决定对象键的第一段 */
+    purpose?: string
+  }) => client.post<UploadTarget>('/uploads/presign', data),
+  createUpload: (data: {
+    filename: string
+    dataUri?: string
+    sizeBytes?: number
+    purpose?: string
+  }) => client.post<BrewImage>('/uploads', data),
   deleteUpload: (objectKey: string) => client.del<{ ok: boolean }>('/uploads', { objectKey }),
 
   /* 统计 */

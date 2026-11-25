@@ -11,6 +11,7 @@ node_modules/
 .selftest.mjs
 .dump-metadata.mjs
 .dump-parity.mjs
+.test-md.mjs
 
 # Python 后端
 backend/.venv/

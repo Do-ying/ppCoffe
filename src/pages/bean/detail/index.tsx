@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
-import { View, Text } from '@tarojs/components'
+import { useMemo, useState } from 'react'
+import { View, Text, Image } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../services'
+import { ROAST_LEVEL_LABELS } from '../../../domain/types'
 import { BREW_METHODS } from '../../../domain/methods'
 import { useResolvedTheme } from '../../../store/useTheme'
+import Icon from '../../../components/icon'
 
 import './index.scss'
 
@@ -16,30 +18,42 @@ const PROCESS_LABEL: Record<string, string> = {
   other: '其他'
 }
 
-const ROAST_LABEL: Record<string, string> = {
-  light: '浅焙',
-  medium: '中焙',
-  medium_dark: '中深焙',
-  dark: '深焙'
+const STAGE_LABEL: Record<string, string> = {
+  resting: '养豆期',
+  peak: '赏味期',
+  fading: '风味衰减',
+  unknown: '烘焙日期未知'
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  resting: '养豆中',
-  peak: '赏味期',
-  fading: '风味衰减'
+const REST_EVENT_LABEL: Record<string, string> = {
+  opened: '开袋',
+  sealed: '密封',
+  divided: '分装',
+  note: '养豆备注'
 }
 
 export default function BeanDetailPage() {
   const { themeClass } = useResolvedTheme()
   const router = Taro.useRouter()
   const queryClient = useQueryClient()
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string>()
   const beanId = router.params.id as string
 
-  const { data: beans } = useQuery({ queryKey: ['beans'], queryFn: api.listBeans })
-  const { data: brews } = useQuery({ queryKey: ['brews'], queryFn: () => api.listBrews() })
-  const { data: roasts } = useQuery({ queryKey: ['roasts'], queryFn: api.listRoasts })
-
-  const bean = beans?.items.find(b => b.id === beanId)
+  const { data: bean } = useQuery({
+    queryKey: ['bean', beanId], queryFn: () => api.getBean(beanId), enabled: !!beanId
+  })
+  const { data: brews } = useQuery({
+    queryKey: ['beanBrews', beanId], queryFn: () => api.beanBrews(beanId), enabled: !!beanId
+  })
+  const { data: roasts } = useQuery({
+    queryKey: ['beanRoasts', beanId], queryFn: () => api.beanRoasts(beanId), enabled: !!beanId
+  })
+  const { data: restEventsData } = useQuery({
+    queryKey: ['restEvents', beanId],
+    queryFn: () => api.listRestEvents(beanId),
+    enabled: !!beanId
+  })
+  const restEvents = restEventsData?.items ?? []
 
   const beanBrews = useMemo(
     () => (brews?.items ?? []).filter(b => b.beanId === beanId),
@@ -85,8 +99,9 @@ export default function BeanDetailPage() {
     )
   }
 
-  const days = Math.floor((Date.now() - new Date(bean.roastDate).getTime()) / 86400000)
-  const stage = days < 7 ? 'resting' : days <= 21 ? 'peak' : 'fading'
+  // 养豆阶段由后端统一计算（与首页摘要同一套口径），前端不再各算一套
+  const stage = bean.restStage?.stage ?? 'unknown'
+  const days = bean.restStage?.days ?? 0
 
   return (
     <View className={`page ${themeClass}`}>
@@ -98,35 +113,91 @@ export default function BeanDetailPage() {
           {bean.origin.region ? ` ${bean.origin.region}` : ''}
           {bean.origin.farm ? ` ${bean.origin.farm}` : ''}
         </Text>
+        <View className="bean__badges">
+          {bean.kind ? (
+            <Text className="tag tag--active">
+              {bean.kind === 'green' ? '生豆' : '成品豆'}
+            </Text>
+          ) : (
+            <Text className="tag tag--danger">待确认类型</Text>
+          )}
+        </View>
       </View>
 
       <View className="page__body">
+        {/* 封面 */}
+        {bean.imageUrl && bean.imageUrl !== failedCoverUrl ? (
+          <Image
+            className="bean-detail__cover"
+            src={bean.imageUrl}
+            mode="aspectFill"
+            onClick={() =>
+              Taro.previewImage({ urls: [bean.imageUrl as string], current: bean.imageUrl as string })
+            }
+            onError={() => setFailedCoverUrl(bean.imageUrl as string)}
+          />
+        ) : (
+          <View className="bean-detail__cover bean-detail__cover--empty"><Icon name="bean" size={34} /></View>
+        )}
+
         {/* 档案 */}
         <View className="panel">
           <View className="data-row">
-            <Text className="data-row__label">处理法 / 烘焙度</Text>
+            <Text className="data-row__label">处理法{bean.kind === 'green' ? '' : ' / 烘焙度'}</Text>
             <Text className="data-row__value">
-              {PROCESS_LABEL[bean.process]} · {ROAST_LABEL[bean.roastLevel]}
+              {PROCESS_LABEL[bean.process]}
+              {bean.kind !== 'green' && bean.roastLevel && ` · ${ROAST_LEVEL_LABELS[bean.roastLevel]}`}
             </Text>
           </View>
           <View className="data-row">
-            <Text className="data-row__label">烘焙日期</Text>
+            <Text className="data-row__label">{bean.kind === 'green' ? '最近烘焙' : '烘焙日期'}</Text>
             <Text className="data-row__value">
-              {bean.roastDate}（{days} 天）
+              {bean.restStage?.roastDate ? `${bean.restStage.roastDate}（${days} 天）`
+                : bean.kind === 'green' ? '尚无已完成炉次' : '未知'}
             </Text>
           </View>
           <View className="data-row">
             <Text className="data-row__label">养豆状态</Text>
             <Text
-              className={stage === 'peak' ? 'data-row__value signal' : stage === 'resting' ? 'data-row__value warn' : 'data-row__value danger'}
+              className={
+                stage === 'peak'
+                  ? 'data-row__value signal'
+                  : stage === 'resting'
+                    ? 'data-row__value warn'
+                    : stage === 'unknown'
+                      ? 'data-row__value mute'
+                      : 'data-row__value danger'
+              }
             >
               {STAGE_LABEL[stage]}
             </Text>
           </View>
-          <View className="data-row">
-            <Text className="data-row__label">剩余</Text>
-            <Text className="data-row__value">{bean.remainingGrams} g</Text>
-          </View>
+          {bean.kind === 'green' ? (
+            <>
+              <View className="data-row">
+                <Text className="data-row__label">购入 / 已用</Text>
+                <Text className="data-row__value">
+                  {bean.weightGrams} g
+                  {bean.usedGreenGrams == null
+                    ? ' · 库存待核对'
+                    : ` / 已用 ${bean.usedGreenGrams} g`}
+                </Text>
+              </View>
+              <View className="data-row">
+                <Text className="data-row__label">剩余生豆</Text>
+                <Text className="data-row__value">
+                  {bean.remainingGrams == null ? '库存待核对' : `${bean.remainingGrams} g`}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View className="data-row">
+              <Text className="data-row__label">剩余</Text>
+              <Text className="data-row__value">
+                {bean.remainingGrams === undefined ? '—' : `${bean.remainingGrams} g`}
+              </Text>
+            </View>
+          )}
           {bean.origin.altitudeMasl && (
             <View className="data-row">
               <Text className="data-row__label">海拔</Text>
@@ -179,14 +250,14 @@ export default function BeanDetailPage() {
         <View className="block">
           <View className="block__head">
             <Text className="section-title">冲煮记录</Text>
-            <Text
+            {bean.kind && <Text
               className="mute"
               onClick={() => {
-                Taro.navigateTo({ url: '/pages/brew/method/index' })
+                Taro.navigateTo({ url: `/pages/brew/bean/index?beanId=${beanId}` })
               }}
             >
               + 冲煮
-            </Text>
+            </Text>}
           </View>
           {beanBrews.length ? (
             <View className="panel panel--flush">
@@ -203,6 +274,9 @@ export default function BeanDetailPage() {
                     <Text className="mute list-row__sub">
                       {b.params.doseGrams}g / {b.params.waterGrams}g · {b.params.brewSeconds}s · 1:
                       {b.params.ratio?.toFixed(1)}
+                      {bean.kind === 'green' && ` · ${b.roastBatchId
+                        ? beanRoasts.find(r => r.id === b.roastBatchId)?.batchNo ?? '炉次'
+                        : '历史未指定'}`}
                     </Text>
                   </View>
                   <View className="list-row__side">
@@ -220,7 +294,7 @@ export default function BeanDetailPage() {
         </View>
 
         {/* 烘焙批次 */}
-        <View className="block">
+        {(bean.kind === 'green' || beanRoasts.length > 0) && <View className="block">
           <View className="block__head">
             <Text className="section-title">烘焙批次</Text>
             <View className="block__actions">
@@ -230,14 +304,14 @@ export default function BeanDetailPage() {
               >
                 查看全部
               </Text>
-              <Text
+              {bean.kind === 'green' && <Text
                 className="mute"
                 onClick={() =>
                   Taro.navigateTo({ url: `/pages/roast/edit/index?beanId=${beanId}` })
                 }
               >
                 + 烘焙
-              </Text>
+              </Text>}
             </View>
           </View>
           {beanRoasts.length ? (
@@ -253,7 +327,8 @@ export default function BeanDetailPage() {
                   <View className="list-row__main">
                     <Text className="list-row__title mono">{r.batchNo}</Text>
                     <Text className="mute list-row__sub">
-                      {r.roaster} · 失重 {r.weightLossPercent}% · DTR {r.dtrPercent}%
+                      {[r.roastLevel && ROAST_LEVEL_LABELS[r.roastLevel], r.roaster,
+                        `失重 ${r.weightLossPercent}%`, `DTR ${r.dtrPercent}%`].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
                   <View className="list-row__side">
@@ -268,6 +343,56 @@ export default function BeanDetailPage() {
           ) : (
             <View className="empty empty--inline">还没有烘焙批次</View>
           )}
+        </View>}
+
+        {/* 养豆事件 */}
+        <View className="block">
+          <View className="block__head">
+            <Text className="section-title">养豆事件</Text>
+            {bean.kind && <Text
+              className="mute"
+              onClick={() => Taro.navigateTo({ url: `/pages/bean/rest/index?beanId=${beanId}` })}
+            >
+              登记
+            </Text>}
+          </View>
+          {restEvents.length ? (
+            <View className="panel panel--flush">
+              {restEvents.map((e, i) => (
+                <View
+                  key={e.id}
+                  className={i > 0 ? 'list-row list-row--bordered' : 'list-row'}
+                >
+                  <View className="list-row__main">
+                    <Text className="list-row__title">
+                      {REST_EVENT_LABEL[e.type] || e.type}
+                    </Text>
+                    <Text className="mute list-row__sub">
+                      {new Date(e.occurredAt).toLocaleDateString()}
+                      {e.roastBatchId
+                        ? ` · ${beanRoasts.find(r => r.id === e.roastBatchId)?.batchNo ?? '炉次'}`
+                        : ' · 购入批次'}
+                      {e.note ? ` · ${e.note}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View className="empty empty--inline">还没有养豆事件</View>
+          )}
+        </View>
+
+        {/* 每克成本：两种豆子统一公式 —— 实付豆款 ÷ 购入克数 */}
+        <View className="panel bean__cost">
+          <View className="data-row">
+            <Text className="data-row__label">每克成本</Text>
+            <Text className="data-row__value">
+              {bean.costPerGram == null
+                ? '未填写采购价'
+                : `¥${bean.costPerGram.toFixed(4)}／克`}
+            </Text>
+          </View>
         </View>
 
         <View className="actions">

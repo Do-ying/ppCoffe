@@ -8509,7 +8509,8 @@
             "type": "string",
             "enum": [
               "brew",
-              "roast"
+              "roast",
+              "bean"
             ]
           }
         },

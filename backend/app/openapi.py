@@ -1154,7 +1154,7 @@ REQUEST_SCHEMAS: Dict[str, Any] = {
             "filename": _str(),
             "contentType": _str(nullable=True),
             "sizeBytes": _int(nullable=True),
-            "purpose": _str(enum=["brew", "roast"]),
+            "purpose": _str(enum=["brew", "roast", "bean"]),
         },
         ["filename"],
     ),

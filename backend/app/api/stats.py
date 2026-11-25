@@ -8,32 +8,23 @@ from typing import Any, Dict, List
 from flask import Blueprint, request
 
 from ..domain.flavor import FLAVOR_AXIS_KEYS, FLAVOR_AXIS_LABELS
+from ..domain.rest import rest_stage_info
 from ..envelope import ok
 from ..extensions import db
 from ..models.bean import Bean
 from ..models.brew import BrewRecord
 from ..models.mixins import utcnow
 from ..models.roast import RoastBatch
+from ..security import current_user
 from ..services import cache
 from .helpers import scope
 
 bp = Blueprint("stats", __name__)
 
 
-def _resting_stage(days: int) -> str:
-    """养豆阶段：0-7 天养豆期 / 7-21 天赏味期 / >30 天风味衰减。"""
-    if days < 7:
-        return "resting"
-    if days <= 21:
-        return "peak"
-    return "fading"
-
-
 @bp.get("/summary")
 def summary():
     """首页汇总：今日/本周统计 + 养豆提醒。"""
-    ttl = current_ttl = 60
-
     def build() -> Dict[str, Any]:
         now = utcnow()
         today_str = now.strftime("%Y-%m-%d")
@@ -60,19 +51,28 @@ def summary():
             by_method[brew.method] = by_method.get(brew.method, 0) + 1
 
         resting_beans = []
+        roasts_by_bean: Dict[str, List[RoastBatch]] = {}
+        for roast in roasts:
+            if roast.is_completed():
+                roasts_by_bean.setdefault(roast.bean_id, []).append(roast)
         for bean in beans:
-            if not bean.roast_date:
-                continue
-            days = (now.date() - bean.roast_date).days
-            resting_beans.append(
-                {
+            sources = (
+                [(r.roast_date, r.id, r.batch_no) for r in roasts_by_bean.get(bean.id, [])]
+                if bean.kind == "green" else [(bean.roast_date, None, None)]
+            )
+            for roast_date, roast_id, batch_no in sources:
+                stage = rest_stage_info(roast_date, now.date())
+                if stage["roastDate"] is None:
+                    continue
+                resting_beans.append({
                     "beanId": bean.id,
                     "name": bean.name,
-                    "roastDate": bean.roast_date.isoformat(),
-                    "daysSinceRoast": days,
-                    "stage": _resting_stage(days),
-                }
-            )
+                    "roastDate": stage["roastDate"],
+                    "daysSinceRoast": stage["days"],
+                    "stage": stage["stage"],
+                    **({"roastBatchId": roast_id, "batchNo": batch_no} if roast_id else {}),
+                })
+        resting_beans.sort(key=lambda row: row["roastDate"], reverse=True)
 
         return {
             "today": {
@@ -89,7 +89,9 @@ def summary():
             "activeSession": None,
         }
 
-    data = cache.cached("stats", "summary", build, current_ttl)
+    user = current_user()
+    key = f"summary:{user.id if user else 'anonymous'}"
+    data = cache.cached("stats", key, build, 60)
     return ok(data)
 
 
@@ -109,6 +111,7 @@ def trends():
         b.id: b
         for b in scope(db.session.query(Bean), Bean).all()
     }
+    roast_map = {r.id: r for r in scope(db.session.query(RoastBatch), RoastBatch).all()}
 
     buckets: Dict[str, Dict[str, List[float]]] = {}
     samples: List[Dict[str, Any]] = []
@@ -116,7 +119,11 @@ def trends():
         axes = (brew.flavor or {}).get("axes") or {}
         if group_by == "roastDate":
             bean = bean_map.get(brew.bean_id)
-            x = bean.roast_date.isoformat() if bean and bean.roast_date else (
+            roast = roast_map.get(brew.roast_batch_id)
+            roast_date = roast.roast_date.date() if roast and roast.bean_id == brew.bean_id else (
+                bean.roast_date if bean else None
+            )
+            x = roast_date.isoformat() if roast_date else (
                 brew.brew_date.strftime("%Y-%m-%d") if brew.brew_date else ""
             )
         else:

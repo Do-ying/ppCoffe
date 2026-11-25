@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
-import { View, Text } from '@tarojs/components'
+import { useMemo, useState } from 'react'
+import { View, Text, Image } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../services'
+import { ROAST_LEVEL_LABELS } from '../../../domain/types'
 import { useResolvedTheme } from '../../../store/useTheme'
+import Icon from '../../../components/icon'
 
 import './index.scss'
 
@@ -15,37 +17,36 @@ const PROCESS_LABEL: Record<string, string> = {
   other: '其他'
 }
 
-const ROAST_LABEL: Record<string, string> = {
-  light: '浅焙',
-  medium: '中焙',
-  medium_dark: '中深焙',
-  dark: '深焙'
-}
-
 const STAGE_LABEL: Record<string, string> = {
   resting: '养豆中',
   peak: '赏味期',
-  fading: '风味衰减'
+  fading: '风味衰减',
+  unknown: '日期未知'
+}
+
+/** 豆子类型标签（kind 为空表示旧数据待确认） */
+const KIND_LABEL: Record<string, string> = {
+  green: '生豆',
+  purchased_roasted: '成品豆'
 }
 
 export default function BeanListPage() {
   const { themeClass } = useResolvedTheme()
+  const [failedCovers, setFailedCovers] = useState<Record<string, string>>({})
   const { data: beans } = useQuery({ queryKey: ['beans'], queryFn: api.listBeans })
   const { data: brews } = useQuery({ queryKey: ['brews'], queryFn: () => api.listBrews() })
   const { data: roasts } = useQuery({ queryKey: ['roasts'], queryFn: api.listRoasts })
 
   const rows = useMemo(
     () =>
-      (beans?.items ?? []).map(b => {
-        const days = Math.floor((Date.now() - new Date(b.roastDate).getTime()) / 86400000)
-        return {
-          bean: b,
-          days,
-          stage: days < 7 ? 'resting' : days <= 21 ? 'peak' : 'fading',
-          brewCount: (brews?.items ?? []).filter(x => x.beanId === b.id).length,
-          roastCount: (roasts?.items ?? []).filter(x => x.beanId === b.id).length
-        }
-      }),
+      (beans?.items ?? []).map(b => ({
+        bean: b,
+        // 养豆阶段由后端统一计算（与豆子详情、首页摘要同一套口径）
+        stage: b.restStage?.stage ?? 'unknown',
+        days: b.restStage?.days ?? 0,
+        brewCount: (brews?.items ?? []).filter(x => x.beanId === b.id).length,
+        roastCount: (roasts?.items ?? []).filter(x => x.beanId === b.id).length
+      })),
     [beans, brews, roasts]
   )
 
@@ -69,15 +70,32 @@ export default function BeanListPage() {
                 onClick={() => Taro.navigateTo({ url: `/pages/bean/detail/index?id=${bean.id}` })}
               >
                 <View className="bean__head">
-                  <Text className="bean__name">{bean.name}</Text>
-                  <Text className="bean__score mono">{days}天</Text>
+                  {bean.imageUrl && failedCovers[bean.id] !== bean.imageUrl ? (
+                    <Image className="bean__cover" src={bean.imageUrl} mode="aspectFill"
+                      onError={() => setFailedCovers(previous => ({ ...previous, [bean.id]: bean.imageUrl as string }))} />
+                  ) : (
+                    <View className="bean__cover bean__cover--empty"><Icon name="bean" /></View>
+                  )}
+                  <View className="bean__head-main">
+                    <Text className="bean__name">{bean.name}</Text>
+                    <Text className="bean__score mono">
+                      {bean.restStage?.days == null ? (bean.kind === 'green' ? '待烘焙' : '日期未知') : `${days}天`}
+                    </Text>
+                  </View>
                 </View>
                 <Text className="mute bean__sub">
                   {bean.roaster} · {bean.origin.country}
                   {bean.origin.region ? ` ${bean.origin.region}` : ''}
                 </Text>
                 <View className="bean__tags">
-                  <Text className="tag">{ROAST_LABEL[bean.roastLevel]}</Text>
+                  {bean.kind ? (
+                    <Text className="tag tag--active">{KIND_LABEL[bean.kind]}</Text>
+                  ) : (
+                    <Text className="tag tag--danger">待确认类型</Text>
+                  )}
+                  {bean.kind !== 'green' && bean.roastLevel && (
+                    <Text className="tag">{ROAST_LEVEL_LABELS[bean.roastLevel]}</Text>
+                  )}
                   <Text className="tag">{PROCESS_LABEL[bean.process]}</Text>
                   {bean.tags.map(t => (
                     <Text className="tag" key={t}>
@@ -86,8 +104,16 @@ export default function BeanListPage() {
                   ))}
                 </View>
                 <View className="bean__foot">
-                  <Text className="mono mute">烘焙 {bean.roastDate}</Text>
-                  <Text className="mono mute">剩余 {bean.remainingGrams}g</Text>
+                  <Text className="mono mute">
+                    {bean.restStage?.roastDate
+                      ? `烘焙 ${bean.restStage.roastDate}`
+                      : bean.kind === 'green' ? '未烘焙' : '烘焙日期未知'}
+                  </Text>
+                  <Text className="mono mute">
+                    {bean.remainingGrams == null
+                      ? '库存待核对'
+                      : `剩余 ${bean.remainingGrams}g`}
+                  </Text>
                   <Text
                     className={
                       stage === 'peak' ? 'signal' : stage === 'resting' ? 'warn' : 'danger'

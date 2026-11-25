@@ -214,6 +214,50 @@ export interface BrewRecord {
   updatedAt: string
 }
 
+/**
+ * 豆子类型
+ *
+ * - `purchased_roasted` 成品豆：购入即可冲煮，烘焙度与烘焙日期在豆子这一层
+ * - `green` 生豆：按购入批次登记库存，可分多炉烘焙，每炉单独记录
+ * - `undefined` 待确认类型：旧数据迁移后的初始状态，确认前可查看历史
+ */
+export type BeanKind = 'purchased_roasted' | 'green'
+
+export const ROAST_LEVEL_LABELS = {
+  light: '浅焙',
+  medium: '中焙',
+  medium_dark: '中深焙',
+  dark: '深焙'
+} as const
+
+/** 养豆阶段（按自然日口径，与后端 app/domain/rest.py 一致） */
+export type RestStage = 'resting' | 'peak' | 'fading' | 'unknown'
+
+export interface RestStageInfo {
+  stage: RestStage
+  label: string
+  /** 距烘焙日期的天数；烘焙日期未知时为 undefined */
+  days?: number
+  roastDate?: string
+}
+
+/** 养豆事件类型 */
+export type RestEventType = 'opened' | 'sealed' | 'divided' | 'note'
+
+/** 养豆事件 */
+export interface RestEvent {
+  id: string
+  beanId: string
+  /** 生豆事件挂在具体炉次；成品豆为 undefined（挂在购入批次上） */
+  roastBatchId?: string
+  type: RestEventType
+  /** ISO 时间 */
+  occurredAt: string
+  note?: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** 咖啡豆批次 */
 export interface Bean {
   id: string
@@ -227,15 +271,30 @@ export interface Bean {
     variety?: string
   }
   process: 'washed' | 'natural' | 'honey' | 'anaerobic' | 'other'
-  roastLevel: 'light' | 'medium' | 'medium_dark' | 'dark'
+  roastLevel: 'light' | 'medium' | 'medium_dark' | 'dark' | null
   agtron?: number
   /** ISO date */
-  roastDate: string
+  roastDate: string | null
   weightGrams: number
-  remainingGrams: number
+  /** 剩余克数：生豆按炉次汇总计算，成品豆为录入值；库存待核对时为 undefined */
+  remainingGrams: number | null | undefined
   tags: string[]
-  imageUrl?: string
+  imageUrl?: string | null
   notes?: string
+  /** 豆子类型：成品豆 / 生豆；undefined 表示旧数据待确认类型 */
+  kind?: BeanKind | null
+  /** 实付豆款（分）；undefined 表示未填写采购价，0 表示明确填了 0 元 */
+  purchaseCostCents?: number | null
+  /** 封面图对象键（对象存储） */
+  sourceFileKey?: string | null
+  /** 生豆已用克数（按炉次汇总）；undefined 表示库存待核对 */
+  usedGreenGrams?: number | null
+  /** 库存是否待核对（历史投豆克数缺失） */
+  stockPending?: boolean
+  /** 每克成本（元/克）；undefined 表示未填写采购价 */
+  costPerGram?: number | null
+  /** 养豆阶段信息 */
+  restStage?: RestStageInfo
   createdAt: string
   updatedAt: string
 }
@@ -302,6 +361,7 @@ export type RoastCurvePayload = RoastCurvePoint[]
 export interface RoastBatchPayload {
   beanId: string
   batchNo: string
+  submissionId?: string
   roaster?: string
   greenGrams?: number
   outGrams?: number
@@ -313,6 +373,8 @@ export interface RoastBatchPayload {
   cuppingScore?: number
   notes?: string
   roastDate?: string
+  /** 每炉的烘焙度（生豆分多炉时各炉独立） */
+  roastLevel?: 'light' | 'medium' | 'medium_dark' | 'dark'
 }
 
 export const ROAST_EVENT_LABELS: Record<RoastEventType, string> = {
@@ -342,6 +404,10 @@ export interface RoastBatch {
   cuppingScore?: number
   notes?: string
   roastDate: string
+  /** 每炉的烘焙度（生豆分多炉时各炉独立） */
+  roastLevel?: 'light' | 'medium' | 'medium_dark' | 'dark'
+  /** 炉次是否完成（有有效下豆时间与投豆量）—— 决定能否用于冲煮与养豆事件 */
+  completed?: boolean
 }
 
 /** 器具 */

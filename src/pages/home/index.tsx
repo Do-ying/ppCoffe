@@ -7,6 +7,22 @@ import { BREW_METHODS } from '../../domain/methods'
 
 import './index.scss'
 import { useResolvedTheme } from '../../store/useTheme'
+import Icon, { type IconName } from '../../components/icon'
+
+/** 冲煮方式 → 器具图标（计划书第六节：方式名称前放对应的器具小图标） */
+const METHOD_ICON: Record<string, IconName> = {
+  pour_over_v60: 'cup',
+  pour_over_kalita: 'cup',
+  pour_over_origami: 'cup',
+  chemex: 'cup',
+  french_press: 'tool',
+  siphon: 'flame',
+  moka: 'tool',
+  espresso: 'tool',
+  aeropress: 'tool',
+  fp: 'tool',
+  cold_brew: 'cup'
+}
 
 const RESTING_LABEL: Record<string, string> = {
   resting: '养豆中',
@@ -30,9 +46,14 @@ export default function HomePage() {
     <View className={`page ${themeClass}`}>
       <View className="page__header">
         <View className="home-top">
-          <View>
-            <Text className="eyebrow">BREW &amp; ROAST LAB</Text>
-            <Text className="page__title">ppCoffe</Text>
+          <View className="home-brand">
+            <View className="home-brand__icon">
+              <Icon name="cup" size={34} />
+            </View>
+            <View>
+              <Text className="eyebrow">BREW &amp; ROAST LAB</Text>
+              <Text className="page__title">ppCoffe</Text>
+            </View>
           </View>
           <Text className="home-settings" onClick={() => go('/pages/settings/index')}>
             设置
@@ -45,17 +66,26 @@ export default function HomePage() {
         {/* 统计 */}
         <View className="stat-row">
           <View className="stat">
-            <Text className="eyebrow">本周冲煮</Text>
+            <View className="stat__label">
+              <Icon name="cup" size={24} />
+              <Text className="eyebrow">本周冲煮</Text>
+            </View>
             <Text className="stat__value mono">{summary?.week.brewCount ?? 0}</Text>
             <Text className="stat__unit">杯</Text>
           </View>
           <View className="stat">
-            <Text className="eyebrow">平均风味</Text>
+            <View className="stat__label">
+              <Icon name="radar" size={24} />
+              <Text className="eyebrow">平均风味</Text>
+            </View>
             <Text className="stat__value mono">{summary?.week.avgFlavor ?? 0}</Text>
             <Text className="stat__unit">/ 10</Text>
           </View>
           <View className="stat">
-            <Text className="eyebrow">豆仓</Text>
+            <View className="stat__label">
+              <Icon name="bean" size={24} />
+              <Text className="eyebrow">豆仓</Text>
+            </View>
             <Text className="stat__value mono">{beans?.items.length ?? 0}</Text>
             <Text className="stat__unit">支</Text>
           </View>
@@ -64,8 +94,11 @@ export default function HomePage() {
         {/* 快速记录 */}
         <View className="block">
           <View className="block__head">
-            <Text className="section-title">快速记录</Text>
-            <Text className="mute" onClick={() => go('/pages/brew/method/index')}>
+            <View className="section-title-row">
+              <Icon name="record" size={26} />
+              <Text className="section-title">快速记录</Text>
+            </View>
+            <Text className="mute" onClick={() => go('/pages/brew/bean/index')}>
               全部方式
             </Text>
           </View>
@@ -74,9 +107,12 @@ export default function HomePage() {
               <View
                 key={m.id}
                 className="quick-item"
-                onClick={() => go(`/pages/brew/method/index?method=${m.id}`)}
+                onClick={() => go(`/pages/brew/bean/index?method=${m.id}`)}
               >
-                <Text className="quick-item__name">{m.name.split(' · ')[0]}</Text>
+                <View className="quick-item__label">
+                  <Icon name={METHOD_ICON[m.id] ?? 'cup'} size={22} />
+                  <Text className="quick-item__name">{m.name.split(' · ')[0]}</Text>
+                </View>
                 <Text className="quick-item__hint mono">
                   {m.params.ratio?.target ? `1:${m.params.ratio.target}` : m.grindHint.slice(0, 4)}
                 </Text>
@@ -87,27 +123,39 @@ export default function HomePage() {
 
         {/* 工具入口 */}
         <View className="block">
-          <Text className="section-title">工具</Text>
+          <View className="section-title-row">
+            <Icon name="tool" size={26} />
+            <Text className="section-title">工具</Text>
+          </View>
           <View className="tool-row">
             <View
               className="tool-item"
               onClick={() => go('/pages/equipment/list/index')}
             >
-              <Text className="tool-item__name">器具</Text>
+              <View className="tool-item__label">
+                <Icon name="grinder" size={24} />
+                <Text className="tool-item__name">器具</Text>
+              </View>
               <Text className="tool-item__hint">磨豆机 · 滤杯 · 咖啡机</Text>
             </View>
             <View
               className="tool-item"
               onClick={() => Taro.switchTab({ url: '/pages/bean/list/index' })}
             >
-              <Text className="tool-item__name">豆仓</Text>
+              <View className="tool-item__label">
+                <Icon name="bag" size={24} />
+                <Text className="tool-item__name">豆仓</Text>
+              </View>
               <Text className="tool-item__hint">曲线按豆子归档</Text>
             </View>
             <View
               className="tool-item"
               onClick={() => go('/pages/roast/list/index')}
             >
-              <Text className="tool-item__name">烘焙</Text>
+              <View className="tool-item__label">
+                <Icon name="flame" size={24} />
+                <Text className="tool-item__name">烘焙</Text>
+              </View>
               <Text className="tool-item__hint">批次 · 失重 · DTR</Text>
             </View>
           </View>
@@ -119,9 +167,16 @@ export default function HomePage() {
             <Text className="section-title">养豆状态</Text>
             <View className="panel panel--flush">
               {summary.restingBeans.map((b, i) => (
-                <View key={b.beanId} className={i > 0 ? 'list-row list-row--bordered' : 'list-row'}>                  <View className="list-row__main">
+                <View
+                  key={b.roastBatchId ?? b.beanId}
+                  className={i > 0 ? 'list-row list-row--bordered' : 'list-row'}
+                  onClick={() => go(`/pages/bean/detail/index?id=${b.beanId}`)}
+                >
+                  <View className="list-row__main">
                     <Text className="list-row__title">{b.name}</Text>
-                    <Text className="mute list-row__sub">烘焙 {b.roastDate}</Text>
+                    <Text className="mute list-row__sub">
+                      {b.batchNo && `${b.batchNo} · `}烘焙 {b.roastDate}
+                    </Text>
                   </View>
                   <View className="list-row__side">
                     <Text className="mono list-row__meta">{b.daysSinceRoast} 天</Text>
