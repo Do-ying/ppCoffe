@@ -223,14 +223,22 @@ export default function BeanDetailPage() {
         <View className="block">
           <View className="block__head">
             <Text className="section-title">烘焙批次</Text>
-            <Text
-              className="mute"
-              onClick={() =>
-                Taro.navigateTo({ url: `/pages/roast/edit/index?beanId=${beanId}` })
-              }
-            >
-              + 烘焙
-            </Text>
+            <View className="block__actions">
+              <Text
+                className="mute"
+                onClick={() => Taro.navigateTo({ url: '/pages/roast/list/index' })}
+              >
+                查看全部
+              </Text>
+              <Text
+                className="mute"
+                onClick={() =>
+                  Taro.navigateTo({ url: `/pages/roast/edit/index?beanId=${beanId}` })
+                }
+              >
+                + 烘焙
+              </Text>
+            </View>
           </View>
           {beanRoasts.length ? (
             <View className="panel panel--flush">

@@ -9,6 +9,7 @@ export default defineAppConfig({
     'pages/brew/detail/index',
     'pages/bean/detail/index',
     'pages/bean/edit/index',
+    'pages/roast/list/index',
     'pages/roast/edit/index',
     'pages/equipment/list/index',
     'pages/equipment/edit/index',

@@ -205,6 +205,14 @@ taro-textarea-core > .taro-textarea {
   padding: var(--sp-4) var(--sp-3) var(--sp-3);
 }
 
+/* 页眉里的 eyebrow 与大标题各占一行。
+ * 它们是并列的两个 <Text>（H5 端是 inline-block 的自定义元素），
+ * 不显式换行就会并排在同一行 —— 表现为「ROAST LOG」和「烘焙记录」贴在一起。 */
+.page__header .eyebrow,
+.page__header .page__title {
+  display: block;
+}
+
 .page__title {
   font-size: var(--fs-title);
   font-weight: 600;

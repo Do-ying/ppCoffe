@@ -103,6 +103,13 @@ export default function HomePage() {
               <Text className="tool-item__name">豆仓</Text>
               <Text className="tool-item__hint">曲线按豆子归档</Text>
             </View>
+            <View
+              className="tool-item"
+              onClick={() => go('/pages/roast/list/index')}
+            >
+              <Text className="tool-item__name">烘焙</Text>
+              <Text className="tool-item__hint">批次 · 失重 · DTR</Text>
+            </View>
           </View>
         </View>
 

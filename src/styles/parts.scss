@@ -68,6 +68,14 @@
   margin-bottom: var(--sp-2);
 }
 
+/* 区块头右侧的多个入口（「查看全部」+「+ 烘焙」之类） */
+.block__actions {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
 .block__hint {
   display: block;
   margin-top: 6rpx;
