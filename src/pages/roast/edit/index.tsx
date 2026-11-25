@@ -3,7 +3,7 @@ import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../services'
-import type { RoastBatch, RoastEvent } from '../../../domain/types'
+import type { RoastBatchPayload, RoastEvent } from '../../../domain/types'
 import { computeRoastMetrics, generateRoastCurve } from '../../../domain/curve/roast'
 import { useResolvedTheme } from '../../../store/useTheme'
 
@@ -82,7 +82,9 @@ export default function RoastEditPage() {
       events
     })
 
-    const payload: Partial<RoastBatch> = {
+    // 提交载荷：curve 在请求体里是**采样点数组**（不是读取时的对象形态），
+    // 所以这里不能用 Partial<RoastBatch> —— 那是读取响应的类型。
+    const payload: RoastBatchPayload = {
       beanId,
       batchNo: batchNo.trim(),
       roaster: roaster.trim() || '未指定烘豆机',

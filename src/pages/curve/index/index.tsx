@@ -65,12 +65,12 @@ export default function CurvePage() {
     const sameBean = roastList.filter(r => r.beanId === selectedRoast.beanId)
     const idx = sameBean.findIndex(r => r.id === selectedRoast.id)
     const prev = idx > 0 ? sameBean[idx - 1] : undefined
-    if (!prev || !prev.curve?.length) return undefined
-    return { label: '上一炉', points: prev.curve, color: '#E9B44C' }
+    if (!prev || !prev.curve?.points?.length) return undefined
+    return { label: '上一炉', points: prev.curve.points, color: '#E9B44C' }
   }, [roastList, selectedRoast])
 
   const brewStats = selected ? curveStats(selected.curve) : null
-  const roastStats = roastCurveStats(selectedRoast?.curve ?? [])
+  const roastStats = roastCurveStats(selectedRoast?.curve?.points ?? [])
 
   return (
     <View className={`page ${themeClass}`}>
@@ -205,7 +205,7 @@ export default function CurvePage() {
 
             <View className="chart-box">
               <RoastCurveChart
-                points={selectedRoast.curve ?? []}
+                points={selectedRoast.curve?.points ?? []}
                 events={selectedRoast.events}
                 height={280}
                 overlays={roastOverlay ? [roastOverlay] : []}

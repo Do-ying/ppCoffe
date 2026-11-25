@@ -266,6 +266,55 @@ export interface RoastCurvePoint {
   ror: number
 }
 
+/**
+ * 烘焙曲线（与后端 `roast_curves` 表 / `RoastCurve.to_dict()` 对应）。
+ *
+ * ⚠️ 注意：后端返回的是**对象** `{ points, events, ... }`，
+ * 不是采样点数组 —— 与冲煮侧的 `BrewCurve { source, points, stages }` 同构。
+ * 早期这里误声明成 `RoastCurvePoint[]`，导致图表拿到对象当数组用、曲线不渲染。
+ */
+export interface RoastCurve {
+  id?: string
+  ownerType?: string
+  ownerId?: string
+  /** 来源：live（硬件采样）/ keypoint（事件合成）/ import（.alog 导入） */
+  source?: string
+  xAxis?: string
+  unit?: string
+  points: RoastCurvePoint[]
+  events?: RoastEvent[]
+  meta?: Record<string, unknown>
+}
+
+/**
+ * 提交烘焙批次时的 curve 载荷：**采样点数组**。
+ *
+ * 与读取形态不同 —— `POST /roasts` 的请求体里 curve 是点数组，
+ * 响应里才是 `{ points, ... }` 对象（见 {@link RoastCurve}）。
+ */
+export type RoastCurvePayload = RoastCurvePoint[]
+
+/**
+ * 新建/更新烘焙批次的提交载荷。
+ *
+ * 与读取形态（{@link RoastBatch}）的区别：`curve` 是采样点数组而非对象。
+ */
+export interface RoastBatchPayload {
+  beanId: string
+  batchNo: string
+  roaster?: string
+  greenGrams?: number
+  outGrams?: number
+  totalSeconds?: number
+  events?: RoastEvent[]
+  curve?: RoastCurvePayload
+  dtrPercent?: number
+  phaseRatio?: { drying: number; maillard: number; development: number }
+  cuppingScore?: number
+  notes?: string
+  roastDate?: string
+}
+
 export const ROAST_EVENT_LABELS: Record<RoastEventType, string> = {
   charge: '投豆',
   turningPoint: '回温点',
@@ -288,8 +337,8 @@ export interface RoastBatch {
   /** 发展比 % */
   dtrPercent: number
   phaseRatio: { drying: number; maillard: number; development: number }
-  /** 烘焙曲线采样点（手工记录或 .alog 导入） */
-  curve?: RoastCurvePoint[]
+  /** 烘焙曲线（对象，含 points 采样点数组）—— 见 {@link RoastCurve} */
+  curve?: RoastCurve
   cuppingScore?: number
   notes?: string
   roastDate: string

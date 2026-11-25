@@ -5,7 +5,8 @@ import type {
   BrewCurve,
   Equipment,
   FlavorProfile,
-  RoastBatch
+  RoastBatch,
+  RoastCurvePoint
 } from '../domain/types'
 import { BREW_METHODS } from '../domain/methods'
 import { generatePlanCurve } from '../domain/curve/generate'
@@ -289,7 +290,21 @@ interface MockDb {
 const db: MockDb = {
   beans: [...beanFixtures],
   brews: [...brewFixtures],
-  roasts: roastFixtures.map(r => ({ ...r, curve: generateRoastCurve(r.events, r.totalSeconds) })),
+  // 读取形态的 curve 是**对象** `{ points, events }` —— 与后端 RoastCurve.to_dict() 一致。
+  // （提交时才是点数组，前端靠 RoastBatchPayload 区分这两种形态）
+  roasts: roastFixtures.map(r => ({
+    ...r,
+    curve: {
+      id: `cv_${r.id}`,
+      ownerType: 'roast',
+      ownerId: r.id,
+      source: 'keypoint',
+      xAxis: 'time',
+      unit: 'second',
+      points: generateRoastCurve(r.events, r.totalSeconds),
+      events: r.events
+    }
+  })),
   equipment: [...equipmentFixtures],
   uploads: []
 }
@@ -432,7 +447,26 @@ export const mockTransport: Transport = {
       return { items: db.roasts } as T
     }
     if (url === '/roasts' && method === 'POST') {
-      const roast = { ...body, id: nextId('rb') } as RoastBatch
+      // 请求体的 curve 是点数组，落库后读取形态是对象 —— 模拟后端的转换
+      const payload = body as Partial<RoastBatch> & { curve?: RoastCurvePoint[] }
+      const { curve: points, ...rest } = payload
+      const id = nextId('rb')
+      const roast = {
+        ...rest,
+        id,
+        curve: points
+          ? {
+              id: `cv_${id}`,
+              ownerType: 'roast',
+              ownerId: id,
+              source: 'keypoint',
+              xAxis: 'time',
+              unit: 'second',
+              points,
+              events: rest.events ?? []
+            }
+          : undefined
+      } as RoastBatch
       db.roasts.unshift(roast)
       return roast as T
     }

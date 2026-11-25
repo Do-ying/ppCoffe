@@ -1,4 +1,13 @@
-import type { Bean, BrewImage, BrewMethod, BrewRecord, Equipment, FlavorDefect, RoastBatch } from '../domain/types'
+import type {
+  Bean,
+  BrewImage,
+  BrewMethod,
+  BrewRecord,
+  Equipment,
+  FlavorDefect,
+  RoastBatch,
+  RoastBatchPayload
+} from '../domain/types'
 import type { FlavorCategory } from '../domain/flavor'
 import type { Diagnosis } from '../domain/diagnosis'
 import { createClient, realTransport, type HttpClient } from './http'
@@ -105,7 +114,8 @@ export const api = {
   /* 烘豆 */
   listRoasts: () => client.get<RoastList>('/roasts'),
   getRoast: (id: string) => client.get<RoastBatch>(`/roasts/${id}`),
-  createRoast: (data: Partial<RoastBatch>) => client.post<RoastBatch>('/roasts', data),
+  // 请求体的 curve 是采样点数组（与读取时的对象形态不同）—— 见 RoastBatchPayload
+  createRoast: (data: RoastBatchPayload) => client.post<RoastBatch>('/roasts', data),
 
   /* 器具 */
   listEquipment: () => client.get<EquipmentList>('/equipment'),
