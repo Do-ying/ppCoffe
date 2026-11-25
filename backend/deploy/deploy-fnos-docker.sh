@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 # ppCoffe → fnOS NAS 部署脚本（Docker 版）
 #
-#   bash deploy/deploy-fnos-docker.sh fnos [NAS_IP]
+#   bash deploy/deploy-fnos-docker.sh fnos
+#
+# 对外地址（可选，决定前端产物里的 API 地址与 MinIO 预签名端点）：
+#
+#   A) 分域名 + HTTPS（frp vhostHTTPSPort 模式）：
+#      WEB_DOMAIN=ppweb.lovexpw.cn \
+#      API_DOMAIN=ppapi.lovexpw.cn \
+#      MINIO_DOMAIN=ppminio.lovexpw.cn \
+#      PUBLIC_SCHEME=https \
+#      bash deploy/deploy-fnos-docker.sh fnos
+#
+#   B) 单地址 + 端口（frp TCP 模式）：
+#      PUBLIC_HOST=1.2.3.4 PUBLIC_SCHEME=http \
+#      bash deploy/deploy-fnos-docker.sh fnos
+#
+# 不给对外地址时默认用 NAS 内网地址（192.168.31.13），仅供局域网调试。
 #
 # 做什么：
 #   1. 同步项目到 NAS /vol2/1000/public/ppcoffe
-#   2. 本地构建 H5 产物（注入 NAS 地址），组装 web/ 构建上下文
+#   2. 本地构建 H5 产物（注入对外 API 地址），组装 web/ 构建上下文
 #   3. 传输镜像（本地有 docker 时 docker save；否则从阿里云中转机拉取）
 #   4. 生成 .env，启动 compose 全栈
 #   5. 等待服务就绪
@@ -31,8 +46,27 @@ API_PORT="${API_PORT:-8080}"
 WEB_PORT="${WEB_PORT:-8081}"
 MINIO_PORT="${MINIO_PORT:-19000}"
 MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-19001}"
-# NAS 局域网地址：前端产物里的 API 地址、预签名端点都要用它
+# NAS 在局域网内的地址：容器间访问用它
 NAS_IP="${NAS_IP:-192.168.31.13}"
+
+# ---- 对外访问地址（浏览器实际访问的地址）----
+#
+# 两种模式：
+#
+#  A) 分域名 + HTTPS（frp vhostHTTPSPort 模式，推荐）：
+#       导出 WEB_DOMAIN / API_DOMAIN / MINIO_DOMAIN 即可。
+#       三个域名各自独立，MinIO 的预签名 Host 与浏览器一致，SigV4 不会错。
+#
+#  B) 单地址 + 端口（frp TCP 模式）：
+#       不设域名，PUBLIC_HOST 指向 NAS 或公网 IP，端口用各自的。
+#
+# ⚠️ SigV4 把 Host（含端口）算进签名，所以 MINIO 公共端点必须与
+#    浏览器实际访问的 host:port 完全一致，否则直传报 403。
+PUBLIC_HOST="${PUBLIC_HOST:-${NAS_IP}}"
+PUBLIC_SCHEME="${PUBLIC_SCHEME:-http}"
+WEB_DOMAIN="${WEB_DOMAIN:-}"
+API_DOMAIN="${API_DOMAIN:-}"
+MINIO_DOMAIN="${MINIO_DOMAIN:-}"
 
 # ---- 复用 fnOS 上已有的 MySQL 容器（宿主机映射端口，不是容器内 3306）----
 # ⚠️ 密钥不写死在这里 —— 从环境变量或同目录 .env 读取，
@@ -67,6 +101,28 @@ for required in MYSQL_ROOT_PASSWORD MYSQL_APP_PASSWORD MINIO_ROOT_PASSWORD \
     fi
 done
 
+# ---- 计算对外访问地址 ----
+# 分域名模式：https://<domain>（HTTPS 默认 443，不带端口）
+# 单地址模式：<scheme>://<host>:<port>
+if [[ -n "$WEB_DOMAIN" ]]; then
+    WEB_URL="${PUBLIC_SCHEME}://${WEB_DOMAIN}"
+else
+    WEB_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${WEB_PORT}"
+fi
+if [[ -n "$API_DOMAIN" ]]; then
+    API_URL="${PUBLIC_SCHEME}://${API_DOMAIN}"
+else
+    API_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${API_PORT}"
+fi
+if [[ -n "$MINIO_DOMAIN" ]]; then
+    # HTTPS 默认 443 —— SigV4 签名端点不能带多余的端口
+    MINIO_URL="${PUBLIC_SCHEME}://${MINIO_DOMAIN}"
+    MINIO_PUBLIC_ENDPOINT_VALUE="${MINIO_DOMAIN}"
+else
+    MINIO_URL="${PUBLIC_SCHEME}://${PUBLIC_HOST}:${MINIO_PORT}"
+    MINIO_PUBLIC_ENDPOINT_VALUE="${PUBLIC_HOST}:${MINIO_PORT}"
+fi
+
 # ---- 镜像来源：优先用本地 docker save，否则从阿里云中转机取预打包的镜像 ----
 IMAGE_SOURCE="${IMAGE_SOURCE:-auto}"   # auto | local | aliyun
 ALIYUN_HOST="${ALIYUN_HOST:-aliyun}"
@@ -98,12 +154,22 @@ rsync -az \
 
 # ======================================================================
 say "[2/6] 构建 H5 产物并组装 web/ 构建上下文"
-H5_OUT="$PROJECT_DIR/tmp/dist-fnos-docker"
+# ⚠️ Taro 的 outputRoot 是用 path.join(cwd, outputRoot) 解析的 ——
+#    传绝对路径会被重复拼接（/proj + /proj/tmp/... → /proj/proj/tmp/...），
+#    所以这里必须用**相对项目根**的相对路径。
+H5_OUT_REL="tmp/dist-fnos-docker"
+H5_OUT="$PROJECT_DIR/$H5_OUT_REL"
 mkdir -p "$PROJECT_DIR/tmp"
-( cd "$PROJECT_DIR" && TARO_APP_OUTPUT_ROOT="$H5_OUT" \
-    TARO_APP_API_BASE_URL="http://${NAS_IP}:${API_PORT}/api/v1" \
+( cd "$PROJECT_DIR" && TARO_APP_OUTPUT_ROOT="$H5_OUT_REL" \
+    TARO_APP_API_BASE_URL="${API_URL}/api/v1" \
     npx taro build --type h5 >/dev/null )
-echo "    H5 构建完成"
+
+# 构建结果必须真的落在预期位置，否则后续拷的是空目录
+if [[ ! -f "$H5_OUT/index.html" ]]; then
+    echo "❌ H5 产物未生成在 $H5_OUT" >&2
+    exit 1
+fi
+echo "    H5 构建完成（${H5_OUT}）"
 
 # web/ 构建上下文 = dist 产物 + nginx 配置 + Dockerfile
 rm -rf "$PROJECT_DIR/tmp/webctx"
@@ -159,7 +225,7 @@ say "[5/6] 生成 .env 并启动 compose"
 ssh "$HOST" "cat > '$REMOTE_DIR/.env' <<EOF
 # ---- 应用 ----
 APP_ENV=production
-PUBLIC_BASE_URL=http://${NAS_IP}:${API_PORT}
+PUBLIC_BASE_URL=${API_URL}
 SECRET_KEY=${SECRET_KEY}
 JWT_SECRET=${JWT_SECRET}
 AUTH_MODE=${AUTH_MODE:-dev}
@@ -190,7 +256,9 @@ MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
 MINIO_APP_ACCESS_KEY=${MINIO_APP_ACCESS_KEY}
 MINIO_APP_SECRET_KEY=${MINIO_APP_SECRET_KEY}
 # ⚠️ 必须与浏览器实际访问的 host:port 一致（SigV4 把 Host 算进签名）
-MINIO_PUBLIC_ENDPOINT=${NAS_IP}:${MINIO_PORT}
+MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT_VALUE}
+# 对外预签名协议：与对外 scheme 一致（TLS 在 frps 终止时为 https）
+MINIO_PUBLIC_SECURE=${MINIO_PUBLIC_SECURE:-$([[ "${PUBLIC_SCHEME}" == "https" ]] && echo true || echo false)}
 MINIO_PUBLIC_BASE_URL=
 MINIO_BUCKET_BREW=ppcoffe-brew
 MINIO_BUCKET_ROAST=ppcoffe-roast
@@ -248,21 +316,18 @@ exit 1"
 ssh "$HOST" "cd '$REMOTE_DIR' && docker compose exec -T api python manage.py init-db && docker compose exec -T api python manage.py seed" || true
 
 echo ""
-echo "✅ 部署完成（NAS 内网地址 ${NAS_IP}）"
+echo "✅ 部署完成"
 echo ""
-echo "   ┌─ H5 前端        http://${NAS_IP}:${WEB_PORT}/"
-echo "   ├─ API           http://${NAS_IP}:${API_PORT}/api/v1"
-echo "   ├─ MinIO S3      http://${NAS_IP}:${MINIO_PORT}        (预签名直传入口)"
-echo "   └─ MinIO 控制台   http://${NAS_IP}:${MINIO_CONSOLE_PORT}/"
+echo "   对外访问地址（浏览器实际用的）："
+echo "   ┌─ H5 前端        ${WEB_URL}/"
+echo "   ├─ API           ${API_URL}/api/v1"
+echo "   ├─ MinIO S3      ${MINIO_URL}          (预签名直传入口)"
+echo "   └─ MinIO 控制台   http://${NAS_IP}:${MINIO_CONSOLE_PORT}/   (仅内网)"
 echo ""
-echo "   frp 配置（frp 服务器 124.220.199.223，已用到 4010，下一个可用 4011）："
-echo "     [ppcoffe-web]   local_port=${WEB_PORT}   remote_port=4011"
-echo "     [ppcoffe-api]   local_port=${API_PORT}   remote_port=4012"
-echo "     [ppcoffe-minio] local_port=${MINIO_PORT} remote_port=4013"
-echo ""
-echo "   ⚠️ 走 frp 后 MINIO_PUBLIC_ENDPOINT 与前端 API 地址要改成对外地址，"
-echo "      否则直传报 SignatureDoesNotMatch。重跑："
-echo "        NAS_IP=<对外地址> bash deploy/deploy-fnos-docker.sh $HOST <对外地址>"
+echo "   容器内网地址（frpc local_port 用这些）："
+echo "     web   → ${NAS_IP}:${WEB_PORT}"
+echo "     api   → ${NAS_IP}:${API_PORT}"
+echo "     minio → ${NAS_IP}:${MINIO_PORT}"
 echo ""
 echo "   常用运维："
 echo "     ssh $HOST 'cd $REMOTE_DIR && docker compose ps'"

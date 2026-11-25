@@ -88,6 +88,17 @@ class BaseConfig:
     MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
     MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
     MINIO_SECURE = _bool(os.getenv("MINIO_SECURE"), False)
+    #: 对外预签名使用的协议（https / http）。
+    #: 与 MINIO_SECURE 分开：容器内读写通常走 http，
+    #: 但对外若由 frps / nginx 终止 TLS，预签名 URL 必须是 https，
+    #: 否则浏览器会因混合内容（HTTPS 页面里发 http 请求）拦截直传。
+    #: 不配置时沿用 MINIO_SECURE。
+    _MINIO_PUBLIC_SECURE = os.getenv("MINIO_PUBLIC_SECURE")
+    MINIO_PUBLIC_SECURE = (
+        _MINIO_PUBLIC_SECURE.lower() in ("1", "true", "yes", "on")
+        if _MINIO_PUBLIC_SECURE is not None
+        else None
+    )
     #: 存储区域。显式指定可避免 SDK 在预签名时联网查 GetBucketLocation。
     MINIO_REGION = os.getenv("MINIO_REGION", "us-east-1")
     #: 公共访问前缀（CDN 或反代域名），为空则用 endpoint + bucket 拼装

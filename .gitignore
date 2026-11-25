@@ -40,3 +40,6 @@ _mcp_*.py
 
 # node_modules 可能是指向本机路径的软链（模式 120000），目录规则匹配不到
 node_modules
+
+# Taro outputRoot 传绝对路径时会重复拼接产生的目录
+/Users/

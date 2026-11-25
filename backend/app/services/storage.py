@@ -74,11 +74,18 @@ class MinioStorage(StorageService):
         public_endpoint = (cfg.get("MINIO_PUBLIC_ENDPOINT") or "").strip()
         self.presign_client = None
         if public_endpoint and public_endpoint != cfg["MINIO_ENDPOINT"]:
+            # 对外预签名的协议可与内网读写分开：
+            #   内网读写   MINIO_SECURE        —— 容器内通常是 http
+            #   对外签名   MINIO_PUBLIC_SECURE —— 对外是 https（TLS 在 frps/nginx 终止）
+            # 不单独配置时沿用 MINIO_SECURE，保持与旧部署兼容。
+            public_secure = cfg.get("MINIO_PUBLIC_SECURE")
+            if public_secure is None:
+                public_secure = cfg["MINIO_SECURE"]
             self.presign_client = Minio(
                 public_endpoint,
                 access_key=cfg["MINIO_ACCESS_KEY"],
                 secret_key=cfg["MINIO_SECRET_KEY"],
-                secure=cfg["MINIO_SECURE"],
+                secure=public_secure,
                 region=region,
             )
         self.buckets = {

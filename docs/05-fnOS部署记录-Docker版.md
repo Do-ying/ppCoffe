@@ -263,6 +263,60 @@ extra_hosts:
   - "host.docker.internal:172.17.0.1"
 ```
 
+### 4.4 对外协议与预签名 scheme 要分开
+
+frp 的 HTTPS 代理（`type = https` + `vhostHTTPSPort`）在 **frps 侧终止 TLS**，
+MinIO 容器内只跑 HTTP。所以有两个独立的开关：
+
+| 配置 | 作用 | 值 |
+|---|---|---|
+| `MINIO_SECURE` | 容器内读写 MinIO 用什么协议 | `false`（内网 HTTP） |
+| `MINIO_PUBLIC_SECURE` | 下发给浏览器的预签名 URL 用什么协议 | `true`（对外 HTTPS） |
+
+不区分的话，下发的 `uploadUrl` 会是 `http://`，浏览器在 HTTPS 页面里发 http 请求
+会被**混合内容策略拦截**。
+
+> `MINIO_PUBLIC_SECURE` 不配置时沿用 `MINIO_SECURE`（向后兼容）。
+
+### 4.5 ⚠️ frp HTTPS 代理必须保留原始 Host 头
+
+**这是图片直传能否成功的关键。**
+
+SigV4 把 `Host` 算进签名。frp 的 `type = https` 代理默认会把 Host 改写成
+`local_ip:local_port`（如 `192.168.31.13:19000`），这会让签名失配：
+
+```
+PUT https://ppminio.lovexpw.cn/ppcoffe-brew/xxx.png
+→ 403 SignatureDoesNotMatch
+```
+
+实测（fnOS 上）：
+
+| 请求实际携带的 Host | 结果 |
+|---|---|
+| `ppminio.lovexpw.cn` | ✅ 200 |
+| `192.168.31.13:19000` | ❌ 403 |
+| `minio:9000` | ❌ 403 |
+
+**修复**：在 frpc 的 MinIO 代理段显式声明域名，并关闭 Host 改写：
+
+```toml
+[[proxies]]
+name = "ppcoffe-minio"
+type = "https"
+customDomains = ["ppminio.lovexpw.cn"]
+localIP = "192.168.31.13"
+localPort = 19000
+# 关键：保留原始 Host 头，否则 SigV4 签名失配
+hostHeaderRewrite = "ppminio.lovexpw.cn"
+```
+
+（若 `hostHeaderRewrite` 不可用，也可让 frp 走 `type = tcp` + 单独端口，
+但那样就不走 443 的域名代理了。）
+
+> web 与 api 两段**不受影响** —— 它们的接口不校验 Host。
+> 只有 MinIO 的预签名直传对 Host 敏感。
+
 ---
 
 ## 5. frp 配置
@@ -334,8 +388,12 @@ remote_port = 4013
 | `docker load` 报镜像不存在 | 传输包损坏，重新从阿里云取（`gzip -t` 校验） |
 | compose 报变量缺失 | `.env` 未生成，先跑部署脚本 |
 | 容器连不上 MySQL | 用 `172.17.0.1`（docker0 网关）而非 `host.docker.internal` |
-| 直传报 403 SignatureDoesNotMatch | 签名端点与浏览器实际访问的 host 不一致（见 4.1） |
+| 直传报 403 SignatureDoesNotMatch | 签名端点与浏览器实际访问的 host 不一致（见 4.1）；**frp https 代理默认会改写 Host，必须配 `hostHeaderRewrite`**（见 4.5） |
+| 直传 URL 是 `http://` 而页面是 https | `MINIO_PUBLIC_SECURE` 没设为 true，浏览器混合内容拦截（见 4.4） |
 | 预签名 PUT 返回 000 | 该端口没代理，或签名 host 与访问地址不符 |
+| 外部访问域名 403「Non-compliance ICP Filing」 | 阿里云**未备案**拦截。国内阿里云要求域名完成 ICP 备案，否则 443 被云端拦截；本机访问正常、外部不通即为该原因 |
+| 部署脚本报 `H5_OUT: unbound variable` | bash 变量后紧跟全角字符（如 `$H5_OUT）`）会吞掉变量名，用 `${H5_OUT}` 明确边界 |
+| H5 产物没更新 / 传到 NAS 是空目录 | Taro 的 `outputRoot` 用 `path.join(cwd, outputRoot)` 解析，**传绝对路径会被重复拼接**；要用相对项目根的相对路径 |
 | 部署脚本报 tar/rsync 超时 | 项目在飞牛同步盘上，排除 `_mcp_*.py` 等临时文件；见下方说明 |
 | API 有数据但前端列表为空 | `ensure_owner` 用户级隔离，演示数据 `user_id=NULL` 归属「无主」（阿里云版一致） |
 

@@ -164,6 +164,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_APP_ACCESS_KEY:?请在 .env 中设置 MINIO_APP_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?请在 .env 中设置 MINIO_APP_SECRET_KEY}
       MINIO_SECURE: "false"
+      # 对外预签名的协议：TLS 在 frps/nginx 终止时为 true，
+      # 保证下发的 uploadUrl 是 https，避免浏览器混合内容拦截
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
       MINIO_REGION: us-east-1
       MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-}
       MINIO_BUCKET_BREW: ${MINIO_BUCKET_BREW:-ppcoffe-brew}
