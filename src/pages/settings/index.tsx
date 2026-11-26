@@ -6,6 +6,7 @@ import {
   useTheme,
   type ThemeMode
 } from '../../store/useTheme'
+import BackBar from '../../components/back-bar'
 
 import './index.scss'
 
@@ -19,6 +20,7 @@ export default function SettingsPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/home/index" />
       <View className="page__header">
         <Text className="eyebrow">SETTINGS</Text>
         <Text className="page__title">设置</Text>

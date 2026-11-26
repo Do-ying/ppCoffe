@@ -23,6 +23,7 @@ import { uploadBrewImage } from '../../../services/uploads'
 
 import './index.scss'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 const DEPTHS: { id: 'quick' | 'standard' | 'cupping'; label: string; hint: string }[] = [
   { id: 'quick', label: '快速', hint: '只打六轴，10 秒完成' },
@@ -107,6 +108,7 @@ export default function FlavorPage() {
   if (!method || !diagnosis) {
     return (
       <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/brew/list/index" />
         <View className="empty">请先选择冲煮方式</View>
       </View>
     )
@@ -117,6 +119,7 @@ export default function FlavorPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/brew/list/index" />
       <View className="page__header">
         <Text className="eyebrow">FLAVOR LOG</Text>
         <Text className="page__title">风味记录</Text>

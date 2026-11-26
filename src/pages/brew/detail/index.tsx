@@ -13,6 +13,7 @@ import Markdown from '../../../components/markdown'
 
 import './index.scss'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 export default function BrewDetailPage() {
   const { themeClass } = useResolvedTheme()
@@ -132,6 +133,7 @@ export default function BrewDetailPage() {
   if (id && !record) {
     return (
       <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/brew/list/index" />
         <View className="empty">{isError ? '读取冲煮记录失败' : '加载中…'}</View>
       </View>
     )
@@ -140,6 +142,7 @@ export default function BrewDetailPage() {
   if (!method) {
     return (
       <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/brew/list/index" />
         <View className="empty">数据不完整</View>
       </View>
     )
@@ -152,6 +155,7 @@ export default function BrewDetailPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/brew/list/index" />
       <View className="page__header">
         <Text className="eyebrow">{method.name.toUpperCase()}</Text>
         <Text className="page__title">{bean?.name ?? '未指定豆子'}</Text>

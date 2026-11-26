@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../services'
 import { ROAST_LEVEL_LABELS, type RestEvent, type RestEventType } from '../../../domain/types'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -104,6 +105,7 @@ export default function BeanRestPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/bean/list/index" />
       <View className="page__header">
         <Text className="eyebrow">REST EVENT</Text>
         <Text className="page__title">养豆事件</Text>

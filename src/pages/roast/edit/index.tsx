@@ -7,6 +7,7 @@ import { ROAST_LEVEL_LABELS } from '../../../domain/types'
 import type { RoastBatchPayload, RoastEvent } from '../../../domain/types'
 import { computeRoastMetrics, generateRoastCurve } from '../../../domain/curve/roast'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -195,11 +196,17 @@ export default function RoastEditPage() {
   }
 
   if (roastId && !loaded) {
-    return <View className={`page ${themeClass}`}><Text>{isError ? '读取炉次失败' : '加载中…'}</Text></View>
+    return (
+      <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/roast/list/index" />
+        <Text>{isError ? '读取炉次失败' : '加载中…'}</Text>
+      </View>
+    )
   }
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/roast/list/index" />
       <View className="page__header">
         <Text className="eyebrow">NEW ROAST</Text>
         <Text className="page__title">{existing ? '更正烘焙批次' : '添加烘焙批次'}</Text>

@@ -39,6 +39,9 @@ dist-h5-test/
 # 探测用临时文件
 _mcp_*.py
 
+# 本地 Agent 工具的工作日志（非项目源码）
+.workbuddy/
+
 # node_modules 可能是指向本机路径的软链（模式 120000），目录规则匹配不到
 node_modules
 

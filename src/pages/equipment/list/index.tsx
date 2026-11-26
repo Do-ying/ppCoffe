@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../services'
 import type { Equipment } from '../../../domain/types'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -43,6 +44,7 @@ export default function EquipmentListPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/settings/index" />
       <View className="page__header">
         <Text className="eyebrow">EQUIPMENT</Text>
         <Text className="page__title">器具</Text>

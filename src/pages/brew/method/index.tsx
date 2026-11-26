@@ -8,6 +8,7 @@ import { chartPalette } from '../../../styles/colors'
 
 import './index.scss'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 const CATEGORY_LABEL: Record<string, string> = {
   percolation: '重力渗透',
@@ -54,6 +55,7 @@ export default function MethodPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/brew/list/index" />
       <View className="page__header">
         <Text className="eyebrow">BREW METHOD</Text>
         <Text className="page__title">选择冲煮方式</Text>

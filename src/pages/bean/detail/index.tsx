@@ -7,6 +7,7 @@ import { ROAST_LEVEL_LABELS } from '../../../domain/types'
 import { BREW_METHODS } from '../../../domain/methods'
 import { useResolvedTheme } from '../../../store/useTheme'
 import Icon from '../../../components/icon'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -94,6 +95,7 @@ export default function BeanDetailPage() {
   if (!bean) {
     return (
       <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/bean/list/index" />
         <View className="empty">没有找到这支豆子</View>
       </View>
     )
@@ -105,6 +107,7 @@ export default function BeanDetailPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/bean/list/index" />
       <View className="page__header">
         <Text className="eyebrow">BEAN</Text>
         <Text className="page__title">{bean.name}</Text>

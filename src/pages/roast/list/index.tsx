@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../services'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -47,6 +48,7 @@ export default function RoastListPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/home/index" />
       <View className="page__header">
         <Text className="eyebrow">ROAST LOG</Text>
         <Text className="page__title">烘焙记录</Text>

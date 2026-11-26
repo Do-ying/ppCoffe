@@ -8,6 +8,7 @@ import type { Bean, BeanKind } from '../../../domain/types'
 import { useResolvedTheme } from '../../../store/useTheme'
 import { pickImages, type PickedImage } from '../../../platform/image'
 import { uploadBeanCover } from '../../../services/uploads'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -184,11 +185,17 @@ export default function BeanEditPage() {
   }
 
   if (id && !loaded) {
-    return <View className={`page ${themeClass}`}><Text>{isError ? '读取豆子失败' : '加载中…'}</Text></View>
+    return (
+      <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/bean/list/index" />
+        <Text>{isError ? '读取豆子失败' : '加载中…'}</Text>
+      </View>
+    )
   }
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/bean/list/index" />
       <View className="page__header">
         <Text className="eyebrow">{id ? 'EDIT BEAN' : 'NEW BEAN'}</Text>
         <Text className="page__title">{id ? '编辑豆子' : '添加豆子'}</Text>

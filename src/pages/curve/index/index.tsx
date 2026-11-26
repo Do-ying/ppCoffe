@@ -10,6 +10,7 @@ import { ROAST_EVENT_LABELS, ROAST_LEVEL_LABELS } from '../../../domain/types'
 import CurveChart from '../../../components/chart/CurveChart'
 import RoastCurveChart from '../../../components/chart/RoastCurveChart'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -102,6 +103,7 @@ export default function CurvePage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/bean/list/index" />
       <View className="page__header">
         <Text className="eyebrow">CURVE ANALYSIS</Text>
         <Text className="page__title">{bean ? bean.name : '曲线'}</Text>

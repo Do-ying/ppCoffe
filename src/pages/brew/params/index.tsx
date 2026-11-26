@@ -8,6 +8,7 @@ import { api } from '../../../services'
 
 import './index.scss'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 export default function ParamsPage() {
   const { themeClass } = useResolvedTheme()
@@ -37,6 +38,7 @@ export default function ParamsPage() {
   if (!method) {
     return (
       <View className={`page ${themeClass}`}>
+        <BackBar fallback="/pages/brew/list/index" />
         <View className="empty">请先选择冲煮方式</View>
       </View>
     )
@@ -47,6 +49,7 @@ export default function ParamsPage() {
 
   return (
     <View className="page">
+      <BackBar fallback="/pages/brew/list/index" />
       <View className="page__header">
         <Text className="eyebrow">{method.category.toUpperCase()}</Text>
         <Text className="page__title">{method.name}</Text>

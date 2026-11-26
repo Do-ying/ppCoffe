@@ -6,6 +6,7 @@ import { api } from '../../../services'
 import { ROAST_LEVEL_LABELS } from '../../../domain/types'
 import { useBrewDraft } from '../../../store/useBrewDraft'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -85,6 +86,7 @@ export default function BrewBeanPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/brew/list/index" />
       <View className="page__header">
         <Text className="eyebrow">SELECT BEAN</Text>
         <Text className="page__title">选择豆子</Text>

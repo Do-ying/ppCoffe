@@ -1,0 +1,47 @@
+/* 返回条
+ *
+ * 与页面大标题同一条左边线对齐（.page__header 的左右内距是 --sp-3），
+ * 按钮自身带上负外边距把点击区向左扩到页面边缘，视觉位置不变。
+ * 箭头用真实子元素画（旋转的方框两边），H5 与小程序表现一致，
+ * 颜色直接吃 currentColor，深浅主题自动跟随。
+ */
+
+.nav-back {
+  display: flex;
+  justify-content: flex-start;
+  padding: var(--sp-2) var(--sp-3) 0;
+}
+
+.nav-back__btn {
+  display: flex;
+  align-items: center;
+  height: 56rpx;
+  padding: 0 var(--sp-2);
+  margin-left: calc(-1 * var(--sp-2));
+  border-radius: var(--r-md);
+  color: var(--text-dim);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-back__btn--hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* 箭头：左边 + 底边，整体旋转 45° */
+.nav-back__arrow {
+  width: 16rpx;
+  height: 16rpx;
+  border-left: 3rpx solid currentColor;
+  border-bottom: 3rpx solid currentColor;
+  transform: rotate(45deg);
+  /* 旋转后视觉重心偏右，往左收一点 */
+  margin-left: 4rpx;
+}
+
+.nav-back__label {
+  margin-left: var(--sp-2);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  letter-spacing: 0.04em;
+}

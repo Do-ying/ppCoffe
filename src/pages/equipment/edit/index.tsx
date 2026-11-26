@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../../services'
 import type { Equipment } from '../../../domain/types'
 import { useResolvedTheme } from '../../../store/useTheme'
+import BackBar from '../../../components/back-bar'
 
 import './index.scss'
 
@@ -93,6 +94,7 @@ export default function EquipmentEditPage() {
 
   return (
     <View className={`page ${themeClass}`}>
+      <BackBar fallback="/pages/equipment/list/index" />
       <View className="page__header">
         <Text className="eyebrow">{id ? 'EDIT EQUIPMENT' : 'NEW EQUIPMENT'}</Text>
         <Text className="page__title">{id ? '编辑器具' : '新增器具'}</Text>
